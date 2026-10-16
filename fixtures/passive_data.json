@@ -1,0 +1,135 @@
+{
+  "target_domain": "example.com",
+  "collected_timestamp": "2026-10-16T12:00:00Z",
+  "subdomains": [
+    {
+      "subdomain": "api.example.com",
+      "sources": ["crt.sh", "dns_resolver"]
+    },
+    {
+      "subdomain": "mail.example.com",
+      "sources": ["crt.sh", "whois", "dns_resolver"]
+    },
+    {
+      "subdomain": "vpn.example.com",
+      "sources": ["crt.sh"]
+    },
+    {
+      "subdomain": "staging.example.com",
+      "sources": ["crt.sh", "shodan"]
+    },
+    {
+      "subdomain": "unresolved-legacy.example.com",
+      "sources": ["crt.sh"]
+    }
+  ],
+  "dns_records": [
+    {
+      "record_type": "A",
+      "host": "example.com",
+      "value": "93.184.216.34",
+      "source": "dns_resolver",
+      "ttl": 3600
+    },
+    {
+      "record_type": "AAAA",
+      "host": "example.com",
+      "value": "2606:2800:220:1:248:1893:25c8:1946",
+      "source": "dns_resolver",
+      "ttl": 3600
+    },
+    {
+      "record_type": "A",
+      "host": "api.example.com",
+      "value": "93.184.216.34",
+      "source": "dns_resolver",
+      "ttl": 300
+    },
+    {
+      "record_type": "A",
+      "host": "mail.example.com",
+      "value": "93.184.216.35",
+      "source": "dns_resolver",
+      "ttl": 300
+    },
+    {
+      "record_type": "A",
+      "host": "vpn.example.com",
+      "value": "93.184.216.36",
+      "source": "dns_resolver",
+      "ttl": 300
+    },
+    {
+      "record_type": "A",
+      "host": "staging.example.com",
+      "value": "93.184.216.34",
+      "source": "dns_resolver",
+      "ttl": 300
+    },
+    {
+      "record_type": "MX",
+      "host": "example.com",
+      "value": "mail.example.com",
+      "source": "dns_resolver",
+      "ttl": 3600
+    },
+    {
+      "record_type": "NS",
+      "host": "example.com",
+      "value": "ns1.example.com",
+      "source": "dns_resolver",
+      "ttl": 86400
+    },
+    {
+      "record_type": "TXT",
+      "host": "example.com",
+      "value": "v=spf1 include:_spf.example.com ~all",
+      "source": "dns_resolver",
+      "ttl": 3600
+    }
+  ],
+  "whois": {
+    "registrar": "Internet Assigned Numbers Authority",
+    "organization": "Example Corporation",
+    "country": "US",
+    "creation_date": "1992-01-01"
+  },
+  "indexed_services": [
+    {
+      "host": "93.184.216.34",
+      "port": 80,
+      "protocol": "tcp",
+      "service_name": "http",
+      "product": "nginx",
+      "version": "1.24.0",
+      "source": "shodan_indexed"
+    },
+    {
+      "host": "93.184.216.34",
+      "port": 443,
+      "protocol": "tcp",
+      "service_name": "https",
+      "product": "nginx",
+      "version": "1.24.0",
+      "source": "shodan_indexed"
+    },
+    {
+      "host": "93.184.216.35",
+      "port": 25,
+      "protocol": "tcp",
+      "service_name": "smtp",
+      "product": "Postfix ESMTP",
+      "version": "3.8.1",
+      "source": "shodan_indexed"
+    },
+    {
+      "host": "93.184.216.36",
+      "port": 22,
+      "protocol": "tcp",
+      "service_name": "ssh",
+      "product": "OpenSSH",
+      "version": "9.3p1",
+      "source": "shodan_indexed"
+    }
+  ]
+}

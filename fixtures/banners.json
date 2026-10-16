@@ -1,0 +1,37 @@
+[
+  {
+    "host": "93.184.216.34",
+    "port": 80,
+    "banner": "HTTP/1.1 200 OK\r\nServer: nginx/1.24.0\r\nDate: Wed, 16 Oct 2026 12:00:00 GMT\r\nContent-Type: text/html\r\nConnection: close",
+    "expected_product": "nginx",
+    "expected_version": "1.24.0"
+  },
+  {
+    "host": "93.184.216.36",
+    "port": 22,
+    "banner": "SSH-2.0-OpenSSH_9.3p1 Ubuntu-1ubuntu3.2\r\n",
+    "expected_product": "OpenSSH",
+    "expected_version": "9.3p1"
+  },
+  {
+    "host": "93.184.216.35",
+    "port": 25,
+    "banner": "220 mail.example.com ESMTP Postfix (Ubuntu)\r\n",
+    "expected_product": "Postfix ESMTP",
+    "expected_version": null
+  },
+  {
+    "host": "192.0.2.10",
+    "port": 21,
+    "banner": "220 (vsFTPd 3.0.5)\r\n530 Please login with USER and PASS.\r\n",
+    "expected_product": "vsftpd",
+    "expected_version": "3.0.5"
+  },
+  {
+    "host": "192.0.2.20",
+    "port": 443,
+    "banner": "HTTP/1.1 200 OK\r\nServer: Apache/2.4.58 (Debian)\r\nContent-Length: 1024",
+    "expected_product": "Apache HTTP Server",
+    "expected_version": "2.4.58"
+  }
+]

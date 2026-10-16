@@ -1,0 +1,135 @@
+[
+  {
+    "id": "ssh-openssh",
+    "pattern": "OpenSSH",
+    "product": "OpenSSH",
+    "protocol": "SSH",
+    "category": "Remote Access"
+  },
+  {
+    "id": "ssh-dropbear",
+    "pattern": "dropbear",
+    "product": "Dropbear SSH",
+    "protocol": "SSH",
+    "category": "Remote Access"
+  },
+  {
+    "id": "ssh-libssh",
+    "pattern": "libssh",
+    "product": "libssh",
+    "protocol": "SSH",
+    "category": "Remote Access"
+  },
+  {
+    "id": "web-nginx",
+    "pattern": "nginx",
+    "product": "nginx",
+    "protocol": "HTTP",
+    "category": "Web Server"
+  },
+  {
+    "id": "web-apache",
+    "pattern": "Apache",
+    "product": "Apache HTTP Server",
+    "protocol": "HTTP",
+    "category": "Web Server"
+  },
+  {
+    "id": "web-caddy",
+    "pattern": "Caddy",
+    "product": "Caddy Server",
+    "protocol": "HTTP",
+    "category": "Web Server"
+  },
+  {
+    "id": "web-iis",
+    "pattern": "Microsoft-IIS",
+    "product": "Microsoft IIS",
+    "protocol": "HTTP",
+    "category": "Web Server"
+  },
+  {
+    "id": "web-litespeed",
+    "pattern": "LiteSpeed",
+    "product": "LiteSpeed Web Server",
+    "protocol": "HTTP",
+    "category": "Web Server"
+  },
+  {
+    "id": "web-cloudflare",
+    "pattern": "cloudflare",
+    "product": "Cloudflare Reverse Proxy",
+    "protocol": "HTTP",
+    "category": "CDN/Proxy"
+  },
+  {
+    "id": "web-envoy",
+    "pattern": "envoy",
+    "product": "Envoy Proxy",
+    "protocol": "HTTP",
+    "category": "CDN/Proxy"
+  },
+  {
+    "id": "ftp-vsftpd",
+    "pattern": "vsftpd",
+    "product": "vsftpd",
+    "protocol": "FTP",
+    "category": "File Transfer"
+  },
+  {
+    "id": "ftp-proftpd",
+    "pattern": "ProFTPD",
+    "product": "ProFTPD",
+    "protocol": "FTP",
+    "category": "File Transfer"
+  },
+  {
+    "id": "ftp-pureftpd",
+    "pattern": "Pure-FTPd",
+    "product": "Pure-FTPd",
+    "protocol": "FTP",
+    "category": "File Transfer"
+  },
+  {
+    "id": "mail-postfix",
+    "pattern": "Postfix",
+    "product": "Postfix ESMTP",
+    "protocol": "SMTP",
+    "category": "Mail Server"
+  },
+  {
+    "id": "mail-exim",
+    "pattern": "Exim",
+    "product": "Exim ESMTP",
+    "protocol": "SMTP",
+    "category": "Mail Server"
+  },
+  {
+    "id": "mail-sendmail",
+    "pattern": "Sendmail",
+    "product": "Sendmail",
+    "protocol": "SMTP",
+    "category": "Mail Server"
+  },
+  {
+    "id": "db-mysql",
+    "pattern": "mysql_native_password",
+    "product": "MySQL Database",
+    "protocol": "MySQL",
+    "category": "Database"
+  },
+  {
+    "id": "db-mariadb",
+    "pattern": "MariaDB",
+    "product": "MariaDB",
+    "protocol": "MySQL",
+    "category": "Database"
+  },
+  {
+    "id": "db-postgres",
+    "pattern": "PostgreSQL",
+    "product": "PostgreSQL Database",
+    "protocol": "PostgreSQL",
+    "category": "Database"
+  }
+]
