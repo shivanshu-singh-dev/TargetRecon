@@ -2,8 +2,9 @@
 **A Coursework Framework for Design and Analysis of Algorithms (DAA)**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/pytest-38%20passed-brightgreen.svg)]()
+[![Tests Passing](https://img.shields.io/badge/pytest-48%20passed-brightgreen.svg)]()
 [![Algorithms](https://img.shields.io/badge/DAA-Knapsack%20DP%20%7C%20Aho--Corasick%20%7C%20Graph%20Traversals-orange.svg)]()
+[![Dashboard](https://img.shields.io/badge/UI-FastAPI%20%2B%20React%20%2B%20Tailwind-teal.svg)]()
 [![License](https://img.shields.io/badge/license-Academic%20Educational-lightgrey.svg)]()
 
 ---
@@ -66,7 +67,15 @@ Modern reconnaissance tools collect vast quantities of unstructured, multi-sourc
                        |    Reporting Engine       |
                        | - report.json (Audit)     |
                        | - report.md (Academic)    |
-                       +---------------------------+
+                       +-------------+-------------+
+                                     |
+               +---------------------+---------------------+
+               |                                           |
+               v                                           v
+      [Unified CLI Engine]                    [FastAPI Local Adapter]
+     - python main.py demo                   - http://127.0.0.1:8000
+     - python main.py scan                   - React + TypeScript SPA
+     - python main.py benchmark              - Interactive DAA Labs
 ```
 
 ### Module Layout
@@ -74,14 +83,27 @@ Modern reconnaissance tools collect vast quantities of unstructured, multi-sourc
 ```text
 TargetRecon/
 ├── main.py                  # Unified CLI (demo, scan, benchmark)
+├── api_server.py            # Localhost FastAPI REST adapter & SPA static server
 ├── config.py                # Centralized configuration, timeouts, paths, credentials
 ├── models.py                # Provenance-preserving data models and normalization
 ├── scheduler.py             # DAA 0/1 Knapsack DP, Greedy, and Discovery schedulers
 ├── graph.py                 # Adjacency-list asset graph, BFS, DFS, consistency checks
 ├── report.py                # Dual JSON & Markdown report generation engine
-├── requirements.txt         # Core dependencies
+├── run_dashboard.bat        # Windows 1-click batch launcher for web dashboard
+├── run_dashboard.ps1        # PowerShell launcher (production & dev modes)
+├── requirements.txt         # Core dependencies (requests, dnspython, pytest, fastapi, uvicorn)
 ├── .env.example             # Sample environment variables
 ├── .gitignore               # Ignored artifacts, virtual environments, cache
+├── frontend/                # Professional SOC Web Dashboard
+│   ├── package.json         # React 18, TypeScript, Tailwind CSS, Recharts, Lucide
+│   ├── vite.config.ts       # Vite configuration with /api backend proxy
+│   ├── tailwind.config.js   # Dark graphite SOC theme configuration
+│   ├── dist/                # Production-compiled static assets
+│   └── src/
+│       ├── api.ts           # Type-safe REST client for FastAPI endpoints
+│       ├── types.ts         # TypeScript schema definitions matching backend models
+│       ├── components/      # Sidebar, Header, KPI Cards, Status Badges
+│       └── pages/           # Overview, NewRun, Inventory, Graph, Algorithms, Findings, Reports
 ├── passive/
 │   ├── crtsh.py             # Certificate transparency query engine
 │   ├── dns_records.py       # Passive DNS resolver queries
@@ -112,7 +134,8 @@ TargetRecon/
     ├── test_normalization.py# Unit tests for normalization and deduplication
     ├── test_scope_and_nmap.py# Scope allowlist & offline XML parser tests
     ├── test_passive_fixtures.py# Passive parsing and graceful tool degradation
-    └── test_reporting.py    # Report generation tests
+    ├── test_reporting.py    # Report generation tests
+    └── test_api_server.py   # FastAPI adapter and DAA REST endpoint tests
 ```
 
 ---
@@ -132,19 +155,27 @@ The framework gracefully detects whether external tools are installed on the sys
 
 ### Step-by-Step Setup
 
-```bash
-# 1. Clone or navigate to the repository directory
+```powershell
+# 1. Navigate to the project root directory
 cd s:\TargetRecon
 
-# 2. (Optional) Create and activate a Python virtual environment
+# 2. Create the project-local Python virtual environment
 python -m venv .venv
-# On Windows PowerShell:
+
+# 3. Activate the virtual environment in Windows PowerShell
+# (If execution of scripts is restricted in your PowerShell session, first run:
+#  Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned)
 .venv\Scripts\Activate.ps1
-# On Linux/macOS:
+
+# (On Linux / macOS bash or zsh):
 # source .venv/bin/activate
 
-# 3. Install core dependencies
+# 4. Install dependencies strictly inside .venv
 pip install -r requirements.txt
+
+# 5. Run the test suite within the virtual environment
+pytest -v
+# (or directly via: .venv\Scripts\pytest.exe -v)
 ```
 
 ---
@@ -230,9 +261,94 @@ python main.py benchmark --target graph
 
 ---
 
-## 6. DAA Theoretical Foundations & Complexity Analysis
+## 6. Cybersecurity Web Dashboard & REST API
 
-### 6.1 Probe Scheduling: 0/1 Knapsack Dynamic Programming
+The framework provides an interactive, dark-themed SOC (Security Operations Center) dashboard built with **React**, **TypeScript**, **Tailwind CSS**, and a **FastAPI** backend adapter.
+
+### 6.1 Dashboard Architecture
+
+- **Visual Theme:** Dark graphite background (`#030712`), slate cards (`#0f172a`), cyan/teal accents (`#06b6d4`), and high-contrast typography.
+- **Backend Source of Truth:** Pure Python reconnaissance engine and algorithms; no simulated numbers or hardcoded charts.
+- **Localhost Isolation:** Server binds exclusively to `127.0.0.1:8000` to prevent unintended network exposure.
+- **Safety Enforcement:** Active reconnaissance cannot be initiated without an explicit server-side scope allowlist and affirmative confirmation.
+
+```
++--------------------------------------------------------------------+
+|  TargetRecon SOC Web Dashboard                                     |
+|  +------------------+  +-----------------------------------------+ |
+|  | [Sidebar]        |  | [Header: Health Badge, Run Selector]    | |
+|  | - Overview       |  +-----------------------------------------+ |
+|  | - New Recon Run  |  | [Active View]                           | |
+|  | - Inventory      |  |  * KPI Cards (Assets, IPs, Ports)       | |
+|  | - Asset Graph    |  |  * Interactive Topology Graph (Canvas)  | |
+|  | - Algorithms Lab |  |  * Algorithm Scaling Curves (Recharts)  | |
+|  | - Findings       |  |  * Live DAA Interactive Sandboxes       | |
+|  | - Reports        |  |  * Scope Allowlist Input & Validation   | |
+|  +------------------+  +-----------------------------------------+ |
++--------------------------------------------------------------------+
+                                | (Fetch / JSON)
+                                v
++--------------------------------------------------------------------+
+|  FastAPI Adapter (api_server.py: 127.0.0.1:8000)                   |
+|  * Static SPA Hosting (frontend/dist/)                             |
+|  * Background Recon Job Runner & Polling State Machine             |
+|  * Pure-Python DAA Execution Engine (Knapsack, Aho-Corasick, Graph)|
++--------------------------------------------------------------------+
+```
+
+### 6.2 Launching the Dashboard
+
+#### Option A: One-Click Launch (Windows Batch or PowerShell)
+Double-click `run_dashboard.bat` or run in PowerShell:
+```powershell
+.\run_dashboard.ps1
+```
+The script activates `.venv`, starts the server at `http://127.0.0.1:8000`, and opens the default browser.
+
+#### Option B: Direct Python Execution
+```powershell
+.venv\Scripts\python.exe api_server.py
+```
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
+
+#### Option C: Development Mode (Hot-Reloading Frontend)
+For frontend development with instant Vite HMR:
+```powershell
+# In terminal 1 (FastAPI backend):
+.venv\Scripts\python.exe api_server.py
+
+# In terminal 2 (Vite dev server):
+cd frontend
+npm run dev
+```
+Open [http://localhost:5173](http://localhost:5173). Requests to `/api/*` are automatically proxied to port 8000.
+
+### 6.3 REST API Endpoints
+
+| Category | Method & Endpoint | Description |
+|:---|:---|:---|
+| **System** | `GET /api/health` | System status, signature counts, external tool availability |
+| **Runs** | `GET /api/runs` | List historical and active reconnaissance runs |
+| | `POST /api/runs` | Dispatch new run (Demo, Passive, or Active with Scope) |
+| | `GET /api/runs/{id}` | Full run metadata, summary KPIs, and scheduler results |
+| | `GET /api/runs/{id}/status` | Lightweight status polling for live running jobs |
+| | `POST /api/runs/{id}/cancel` | Cancel an in-flight background scan job |
+| **Assets & Graph** | `GET /api/runs/{id}/assets` | Paginated/filtered asset inventory and observations |
+| | `GET /api/runs/{id}/graph` | Adjacency graph nodes, edges, and cluster topology |
+| | `GET /api/runs/{id}/findings` | Graph consistency discrepancies and evidence audit |
+| **Reports** | `GET /api/runs/{id}/reports/json` | Download raw JSON audit report |
+| | `GET /api/runs/{id}/reports/markdown` | Download formatted academic Markdown report |
+| **DAA Test Bench** | `POST /api/algorithms/match-banner` | Live Aho–Corasick vs. Naive comparison on custom text |
+| | `POST /api/algorithms/schedule` | Live Knapsack DP vs. Greedy vs. Discovery on custom items |
+| | `POST /api/algorithms/graph-traverse`| Live step-by-step BFS or DFS traversal on run graph |
+| **Benchmarks** | `GET /api/benchmarks/results` | Historical empirical scaling benchmark datasets |
+| | `POST /api/benchmarks/{target}` | Trigger offline benchmark re-computation |
+
+---
+
+## 7. DAA Theoretical Foundations & Complexity Analysis
+
+### 7.1 Probe Scheduling: 0/1 Knapsack Dynamic Programming
 
 #### Problem Formulation
 Given $n$ candidate active probes, each with estimated resource cost $w_i \in \mathbb{Z}^+$ and estimated information value $v_i \in \mathbb{Z}^+$, select a subset $S \subseteq \{1, \dots, n\}$ maximizing total value:
@@ -259,7 +375,7 @@ Starting at $i = n$ and $w = B$, if $dp[i][w] \ne dp[i-1][w]$, candidate $i-1$ w
 
 ---
 
-### 6.2 Multi-Pattern Matching: Aho–Corasick Algorithm
+### 7.2 Multi-Pattern Matching: Aho–Corasick Algorithm
 
 #### Trie and Automaton Construction
 Let $P = \sum_{k=1}^K |p_k|$ be the sum of lengths of all $K$ signatures.
@@ -280,7 +396,7 @@ For input text of length $L$ emitting $Z$ reported occurrences:
 
 ---
 
-### 6.3 Asset Correlation Graph: Traversals and Consistency
+### 7.3 Asset Correlation Graph: Traversals and Consistency
 
 #### Representation
 - Vertex set $V$: Domains, Subdomains, IP Addresses, Endpoints (`host:port`), Services.
@@ -300,11 +416,11 @@ For input text of length $L$ emitting $Z$ reported occurrences:
 
 ---
 
-## 7. Empirical Benchmark Results
+## 8. Empirical Benchmark Results
 
 All benchmarks were executed offline on Windows 11 with Python 3.12.4. Results were generated via `time.perf_counter()` over 5 repetitions with median filtering.
 
-### 7.1 Probe Scheduler Benchmark
+### 8.1 Probe Scheduler Benchmark
 
 | Candidate Probes ($n$) | Budget ($B$) | DP Value | DP Cost | DP Runtime | Greedy Value | Greedy Optimal? | Greedy Efficiency | Discovery Value | Discovery Efficiency |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -321,7 +437,7 @@ All benchmarks were executed offline on Windows 11 with Python 3.12.4. Results w
 
 ---
 
-### 7.2 Multi-Pattern Matcher Benchmark (Aho–Corasick vs. Naive)
+### 8.2 Multi-Pattern Matcher Benchmark (Aho–Corasick vs. Naive)
 
 | Signatures ($K$) | Text Length ($L$) | AC Build Time | AC Search Time | Naive Search Time | **AC Speedup** | Output Equivalent? |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -338,7 +454,7 @@ All benchmarks were executed offline on Windows 11 with Python 3.12.4. Results w
 
 ---
 
-### 7.3 Asset Correlation Graph Benchmark
+### 8.3 Asset Correlation Graph Benchmark
 
 | Subdomains | IPs | Total Vertices ($V$) | Total Edges ($E$) | Build Time | BFS Runtime | DFS Runtime | Vertices Explored | Coverage Equivalence |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -353,9 +469,9 @@ All benchmarks were executed offline on Windows 11 with Python 3.12.4. Results w
 
 ---
 
-## 8. Verification & Test Suite
+## 9. Verification & Test Suite
 
-The test suite contains **38 automated unit tests** covering:
+The test suite contains **48 automated unit tests** covering:
 - Mathematical optimality of 0/1 Knapsack DP.
 - Scenarios where Greedy is provably suboptimal.
 - Aho-Corasick overlapping pattern matching and equivalence with naive search.
@@ -364,6 +480,7 @@ The test suite contains **38 automated unit tests** covering:
 - Scope allowlist validation and rejection of unauthorized targets.
 - Offline parsing of Nmap XML and passive JSON fixtures.
 - Dual report generation (JSON and Markdown).
+- FastAPI REST adapter endpoints, health probes, run state machines, and live algorithm benches.
 
 To execute the complete test suite:
 
@@ -375,9 +492,17 @@ Expected output:
 ```text
 ============================= test session starts =============================
 platform win32 -- Python 3.12.4, pytest-9.1.1
-collected 38 items
+collected 48 items
 
-tests/test_graph.py::test_bfs_traversal PASSED                           [  2%]
+tests/test_api_server.py::test_get_health PASSED                         [  2%]
+tests/test_api_server.py::test_list_runs_includes_historical_demo PASSED [  4%]
+tests/test_api_server.py::test_get_run_details_and_assets PASSED         [  6%]
+tests/test_api_server.py::test_active_run_creation_safety_validation PASSED [  8%]
+tests/test_api_server.py::test_live_banner_matching_endpoint PASSED      [ 10%]
+tests/test_api_server.py::test_live_scheduler_endpoint PASSED            [ 12%]
+tests/test_api_server.py::test_live_graph_traversal_endpoint PASSED      [ 14%]
+tests/test_api_server.py::test_get_benchmark_results_endpoint PASSED     [ 16%]
+tests/test_graph.py::test_bfs_traversal PASSED                           [ 18%]
 tests/test_graph.py::test_dfs_traversal PASSED                           [  5%]
 tests/test_graph.py::test_path_tracing PASSED                            [  7%]
 tests/test_graph.py::test_shared_infrastructure_detection PASSED         [ 10%]
@@ -412,16 +537,18 @@ tests/test_scheduler.py::test_compare_strategies PASSED                  [ 84%]
 tests/test_scheduler.py::test_candidate_generation PASSED                [ 86%]
 tests/test_scope_and_nmap.py::test_scope_manager_hostnames_and_ips PASSED [ 89%]
 tests/test_scope_and_nmap.py::test_scope_validation_exception PASSED     [ 92%]
-tests/test_scope_and_nmap.py::test_scope_file_loading PASSED             [ 94%]
-tests/test_scope_and_nmap.py::test_parse_nmap_xml_offline PASSED         [ 97%]
-tests/test_scope_and_nmap.py::test_parse_nmap_malformed_xml PASSED       [100%]
+tests/test_scope_and_nmap.py::test_scope_file_loading PASSED             [ 90%]
+tests/test_scope_and_nmap.py::test_parse_nmap_xml_offline PASSED         [ 92%]
+tests/test_scope_and_nmap.py::test_parse_nmap_malformed_xml PASSED       [ 95%]
+tests/test_scope_and_nmap.py::test_hostname_suffix_matching PASSED       [ 97%]
+tests/test_scope_and_nmap.py::test_dns_rebinding_and_ip_auditing PASSED  [100%]
 
-============================= 38 passed in 0.28s ==============================
+============================= 48 passed in 0.45s ==============================
 ```
 
 ---
 
-## 9. Ethical & Legal Boundaries
+## 10. Ethical & Legal Boundaries
 
 > [!IMPORTANT]
 > **Strict Non-Exploitation Policy:**
@@ -432,7 +559,7 @@ tests/test_scope_and_nmap.py::test_parse_nmap_malformed_xml PASSED       [100%]
 
 ---
 
-## 10. Limitations & Future Research
+## 11. Limitations & Future Research
 
 - **Large Budgets in Knapsack DP:** Because the standard DP recurrence runs in pseudopolynomial time $\mathcal{O}(nB)$, very large integer budgets ($B > 10^7$) require scaling heuristics or fully polynomial-time approximation schemes (FPTAS).
 - **Alphabet Compression in Aho-Corasick:** The current trie implementation uses Python dictionary hashing for transitions. A flattened array representation using dense character mapping could further reduce memory footprint in embedded C/Rust extensions.

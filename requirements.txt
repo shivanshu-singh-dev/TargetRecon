@@ -1,7 +1,8 @@
-# Core dependencies
 dnspython>=2.6.0
 requests>=2.31.0
 pytest>=8.0.0
+fastapi>=0.110.0
+uvicorn>=0.28.0
 
 # Optional development & benchmarking tools
 # (The framework uses Python standard library for all DAA algorithms)

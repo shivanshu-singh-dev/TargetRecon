@@ -13,6 +13,7 @@ import argparse
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 
 from config import config
@@ -381,13 +382,19 @@ def run_active_mode(
     matcher.build()
 
     for probe in selected_probes:
-        # Re-verify scope before every probe
-        if not scope_mgr.is_in_scope(probe.host):
-            logger.warning("Skipping unauthorized candidate: %s", probe.host)
+        # Re-verify scope and resolve IP before every active probe to prevent DNS rebinding
+        is_allowed, resolved_ip, err_msg = scope_mgr.resolve_and_audit_probe(probe.host, probe.port)
+        if not is_allowed:
+            logger.warning("Skipping unauthorized probe target: %s (Reason: %s)", probe.host, err_msg)
             continue
 
-        logger.info("Executing probe: %s:%d (%s)", probe.host, probe.port, probe.reason)
-        # Attempt socket banner grab
+        logger.info("Executing probe: %s:%d (%s) [Resolved IP: %s]", probe.host, probe.port, probe.reason, resolved_ip)
+        
+        # Enforce configurable rate limit politeness delay
+        if config.RATE_LIMIT_DELAY > 0:
+            time.sleep(config.RATE_LIMIT_DELAY)
+
+        # Attempt socket banner grab subject to configured network timeout
         banner_text = grab_banner(probe.host, probe.port, timeout=config.NETWORK_TIMEOUT)
         if banner_text:
             svc = identify_service(probe.host, probe.port, banner_text, matcher=matcher)

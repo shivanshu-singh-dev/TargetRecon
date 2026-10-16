@@ -100,3 +100,39 @@ def test_parse_nmap_malformed_xml():
     """Verify robust handling of malformed XML."""
     endpoints = parse_nmap_xml("<invalid xml", source="test")
     assert endpoints == []
+
+
+def test_hostname_suffix_matching():
+    """Verify wildcard *.example.com matches subdomains but strictly rejects spoofed suffixes."""
+    mgr = ScopeManager()
+    mgr.add_rule("*.example.com")
+
+    # Valid subdomains
+    assert mgr.is_in_scope("sub.example.com") is True
+    assert mgr.is_in_scope("deep.internal.example.com") is True
+    assert mgr.is_in_scope("example.com") is True
+
+    # Suffix spoofing attempts must be rejected
+    assert mgr.is_in_scope("attacker-example.com") is False
+    assert mgr.is_in_scope("notexample.com") is False
+    assert mgr.is_in_scope("example.com.attacker.com") is False
+
+
+def test_dns_rebinding_and_ip_auditing():
+    """Verify anti-rebinding protection rejects loopback and out-of-subnet IPs."""
+    mgr = ScopeManager()
+    mgr.add_rule("api.example.com")
+    mgr.add_rule("192.168.1.0/24")
+
+    # Hostname is in scope, and resolved IP matches authorized subnet
+    assert mgr.is_in_scope("api.example.com", resolved_ip="192.168.1.10") is True
+
+    # Hostname in scope, but resolved IP rebinds to loopback 127.0.0.1 (must be blocked)
+    assert mgr.is_in_scope("api.example.com", resolved_ip="127.0.0.1") is False
+
+    # Hostname in scope, but resolved IP rebinds to unauthorized cloud metadata IP
+    assert mgr.is_in_scope("api.example.com", resolved_ip="169.254.169.254") is False
+
+    # Hostname in scope, but resolved IP is in unauthorized subnet 10.0.0.1
+    assert mgr.is_in_scope("api.example.com", resolved_ip="10.0.0.1") is False
+
