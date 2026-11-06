@@ -17,8 +17,10 @@ import datetime
 import json
 import logging
 import os
+import socket
 import tempfile
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -32,6 +34,7 @@ from models import (
     CollectionMethod,
     DiscoveredAssetInventory,
     Observation,
+    ProbeResult,
     RelationshipType,
     ServiceEndpoint,
     normalize_domain,
@@ -512,8 +515,60 @@ def execute_run_task(job: RunJob) -> None:
                     break
                 job.progress_message = f"Probing {probe.host}:{probe.port} ({idx + 1}/{len(selected_probes)})..."
                 allowed, resolved_ip, err = scope_mgr.resolve_and_audit_probe(probe.host, probe.port)
-                if allowed:
-                    tls_cert = None
+                if not allowed:
+                    inventory.add_probe_execution(
+                        ProbeResult(
+                            probe_id=probe.probe_id,
+                            host=probe.host,
+                            port=probe.port,
+                            protocol=probe.protocol,
+                            cost=probe.cost,
+                            value=probe.value,
+                            state="FAILED",
+                            details=f"Scope violation: {err}",
+                        )
+                    )
+                    continue
+
+                # Rate limiting delay
+                if config.RATE_LIMIT_DELAY > 0:
+                    time.sleep(config.RATE_LIMIT_DELAY)
+
+                probe_state = "CLOSED"
+                resp_ms = 0.0
+                details = ""
+                t_start = time.perf_counter()
+
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(config.NETWORK_TIMEOUT)
+                    target_ip = resolved_ip or probe.host
+                    sock.connect((target_ip, probe.port))
+                    resp_ms = (time.perf_counter() - t_start) * 1000.0
+                    sock.close()
+                    probe_state = "OPEN"
+                    details = f"TCP handshake established ({resp_ms:.1f}ms)"
+                except socket.timeout:
+                    resp_ms = config.NETWORK_TIMEOUT * 1000.0
+                    probe_state = "TIMEOUT"
+                    details = f"Connection timed out after {config.NETWORK_TIMEOUT}s (filtered)"
+                except ConnectionRefusedError:
+                    resp_ms = (time.perf_counter() - t_start) * 1000.0
+                    probe_state = "CLOSED"
+                    details = "Connection refused (RST received; port closed)"
+                except OSError as exc:
+                    resp_ms = (time.perf_counter() - t_start) * 1000.0
+                    probe_state = "FILTERED"
+                    details = f"Network or route unreachable: {exc}"
+                except Exception as exc:
+                    resp_ms = (time.perf_counter() - t_start) * 1000.0
+                    probe_state = "FAILED"
+                    details = f"Socket execution exception: {exc}"
+
+                banner_text = None
+                tls_cert = None
+
+                if probe_state == "OPEN":
                     if probe.port in (443, 8443):
                         tls_cert = inspect_tls_certificate(probe.host, probe.port)
                         if tls_cert and tls_cert.get("sans"):
@@ -522,9 +577,9 @@ def execute_run_task(job: RunJob) -> None:
                                 if clean_san.endswith(target_domain) and clean_san not in inventory.subdomains:
                                     inventory.add_subdomain(clean_san, source="tls_certificate")
 
-                    banner = grab_banner(probe.host, probe.port, timeout=config.NETWORK_TIMEOUT)
-                    if banner:
-                        svc = identify_service(probe.host, probe.port, banner, matcher=matcher, tls_cert_info=tls_cert)
+                    banner_text = grab_banner(probe.host, probe.port, timeout=config.NETWORK_TIMEOUT)
+                    if banner_text:
+                        svc = identify_service(probe.host, probe.port, banner_text, matcher=matcher, tls_cert_info=tls_cert)
                         inventory.add_service(svc)
                     elif tls_cert:
                         svc = identify_service(
@@ -535,6 +590,33 @@ def execute_run_task(job: RunJob) -> None:
                             tls_cert_info=tls_cert,
                         )
                         inventory.add_service(svc)
+                    else:
+                        svc = ServiceEndpoint(
+                            host=probe.host,
+                            port=probe.port,
+                            protocol="tcp",
+                            service_name="open_port",
+                            confidence=0.70,
+                            source="socket_probe",
+                            method=CollectionMethod.ACTIVE,
+                            verified_live=True,
+                        )
+                        inventory.add_service(svc)
+
+                inventory.add_probe_execution(
+                    ProbeResult(
+                        probe_id=probe.probe_id,
+                        host=probe.host,
+                        port=probe.port,
+                        protocol=probe.protocol,
+                        cost=probe.cost,
+                        value=probe.value,
+                        state=probe_state,
+                        response_time_ms=resp_ms,
+                        banner_excerpt=banner_text[:120] if banner_text else None,
+                        details=details,
+                    )
+                )
 
             if config.is_tool_available("nmap") and not job.cancel_requested:
                 job.progress_message = f"Running Nmap scan on {target_domain}..."
@@ -546,27 +628,69 @@ def execute_run_task(job: RunJob) -> None:
                 graph.add_node(sub, "Subdomain")
                 graph.add_edge(target_domain, sub, RelationshipType.HAS_SUBDOMAIN)
 
+            ip_for_host: dict[str, str] = {}
             for rec in inventory.dns_records:
                 if rec.record_type in ("A", "AAAA"):
                     graph.add_node(rec.value, "IPAddress")
                     graph.add_edge(rec.host, rec.value, RelationshipType.RESOLVES_TO)
+                    ip_for_host[rec.host] = rec.value
+
+                rec_id = f"dns_{rec.host}_{rec.record_type}_{rec.value}"
+                graph.add_node(rec_id, "DNSRecord", {
+                    "record_type": rec.record_type,
+                    "value": rec.value,
+                    "priority": rec.priority,
+                    "source": rec.source,
+                })
+                graph.add_edge(rec.host, rec_id, "HAS_DNS_RECORD")
 
             for svc in inventory.services:
-                graph.add_node(svc.host, "IPAddress")
-                graph.add_node(svc.endpoint_id, "Endpoint", {"port": svc.port})
-                graph.add_edge(svc.host, svc.endpoint_id, RelationshipType.EXPOSES_PORT)
+                resolved_ip = ip_for_host.get(svc.host, svc.host)
+                ep_id = f"{resolved_ip}:{svc.port}/{svc.protocol}"
 
-                svc_node_id = f"service_{svc.endpoint_id}"
+                graph.add_node(resolved_ip, "IPAddress")
+                graph.add_node(ep_id, "Endpoint", {"port": svc.port, "protocol": svc.protocol})
+                graph.add_edge(resolved_ip, ep_id, RelationshipType.EXPOSES_PORT)
+
+                if svc.host != resolved_ip:
+                    graph.add_edge(svc.host, ep_id, "HOSTS_ENDPOINT")
+
+                svc_node_id = f"service_{ep_id}"
                 graph.add_node(svc_node_id, "Service", {
                     "product": svc.product,
                     "version": svc.version,
+                    "service_name": svc.service_name,
+                    "port": svc.port,
                     "banner_product": svc.product,
-                    "fingerprint_product": svc.product,
                     "source": svc.source,
+                    "verified_active": svc.verified_live,
+                    "frameworks": svc.detected_frameworks or [],
+                    "security_score": svc.security_score,
                 })
-                graph.add_edge(svc.endpoint_id, svc_node_id, RelationshipType.RUNS_SERVICE)
+                graph.add_edge(ep_id, svc_node_id, RelationshipType.RUNS_SERVICE)
+
+                if svc.tls_cert_info:
+                    cert_id = f"cert_{target_domain}_{svc.port}"
+                    graph.add_node(cert_id, "TLSCertificate", {
+                        "issuer": svc.tls_cert_info.get("issuer"),
+                        "subject": svc.tls_cert_info.get("subject"),
+                        "days_remaining": svc.tls_cert_info.get("days_remaining"),
+                        "status": svc.tls_cert_info.get("status"),
+                        "serial_number": svc.tls_cert_info.get("serial_number"),
+                        "fingerprint_sha256": svc.tls_cert_info.get("fingerprint_sha256"),
+                    })
+                    graph.add_edge(target_domain, cert_id, "SECURED_BY")
 
             consistency_findings = graph.run_consistency_checks(inventory=inventory, active_scan_performed=True)
+
+            active_probing_summary = {
+                "total_selected": len(selected_probes),
+                "open_count": sum(1 for p in inventory.probe_executions if p.state == "OPEN"),
+                "closed_count": sum(1 for p in inventory.probe_executions if p.state == "CLOSED"),
+                "filtered_count": sum(1 for p in inventory.probe_executions if p.state in ("FILTERED", "TIMEOUT")),
+                "failed_count": sum(1 for p in inventory.probe_executions if p.state == "FAILED"),
+                "results": [p.to_dict() for p in inventory.probe_executions],
+            }
 
             inv_summary = {
                 "subdomains": sorted(inventory.subdomains),
@@ -585,6 +709,8 @@ def execute_run_task(job: RunJob) -> None:
                 graph_data=graph.to_dict(),
                 consistency_findings=[f.to_dict() for f in consistency_findings],
                 scope_rules=job.scope_rules,
+                budget=job.budget,
+                active_probing=active_probing_summary,
             )
 
         # Write reports to disk

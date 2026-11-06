@@ -27,8 +27,23 @@ def build_report_data(
     scope_rules: Optional[list[str]] = None,
     benchmarks: Optional[dict[str, Any]] = None,
     collection_settings: Optional[dict[str, Any]] = None,
+    budget: Optional[int] = None,
+    active_probing: Optional[dict[str, Any]] = None,
+    data_source_contributions: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Assemble structured dictionary containing the full execution report."""
+    effective_budget = budget if budget is not None else config.DEFAULT_PROBE_BUDGET
+
+    settings = collection_settings or {
+        "timeout": config.NETWORK_TIMEOUT,
+        "max_retries": config.MAX_RETRIES,
+        "banner_max_bytes": config.MAX_BANNER_BYTES,
+        "configured_budget": effective_budget,
+        "default_budget": effective_budget,
+    }
+    settings["configured_budget"] = effective_budget
+    settings["default_budget"] = effective_budget
+
     return {
         "metadata": {
             "target_domain": target_domain,
@@ -36,12 +51,7 @@ def build_report_data(
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "framework": "Algorithm-Optimized Reconnaissance Framework",
             "version": "1.0.0 (DAA Coursework)",
-            "settings": collection_settings or {
-                "timeout": config.NETWORK_TIMEOUT,
-                "max_retries": config.MAX_RETRIES,
-                "banner_max_bytes": config.MAX_BANNER_BYTES,
-                "default_budget": config.DEFAULT_PROBE_BUDGET,
-            },
+            "settings": settings,
             "external_tools_status": config.get_tool_status(),
         },
         "authorization_scope": {
@@ -50,6 +60,8 @@ def build_report_data(
         },
         "inventory": inventory_data,
         "scheduler": scheduler_comparison or {},
+        "active_probing": active_probing or {},
+        "data_sources": data_source_contributions or [],
         "graph": graph_data or {},
         "consistency_findings": consistency_findings or [],
         "benchmarks": benchmarks or {},
@@ -181,6 +193,27 @@ def generate_markdown_report(report_data: dict[str, Any]) -> str:
     else:
         lines.append("*No network services detected or active scanning was disabled.*")
 
+    # Section 2.5: Explicit Active Probe Execution Outcomes
+    active_probing = report_data.get("active_probing", {})
+    probe_results = active_probing.get("results", [])
+    if probe_results:
+        lines.extend([
+            f"",
+            f"### 2.5 Active Probe Execution Telemetry ({len(probe_results)} Probes Evaluated)",
+            f"",
+            f"| Host:Port | Protocol | Scheduled Cost | Expected Value | Socket Outcome | Latency | Details |",
+            f"|:---|:---:|:---:|:---:|:---:|:---:|:---|",
+        ])
+        for p in probe_results:
+            hp = f"{p.get('host')}:{p.get('port')}"
+            proto = p.get('protocol', 'tcp')
+            cost = p.get('cost', 1)
+            val = p.get('value', 1)
+            state = p.get('state', 'UNKNOWN')
+            lat = f"{p.get('response_time_ms', 0):.1f}ms"
+            det = p.get('details') or p.get('banner_excerpt') or "—"
+            lines.append(f"| `{hp}` | {proto} | {cost} | {val} | **{state}** | {lat} | {det} |")
+
     lines.extend([
         f"",
         f"## 3. Data Structures & Algorithms (DAA) Analysis",
@@ -188,23 +221,26 @@ def generate_markdown_report(report_data: dict[str, Any]) -> str:
         f"### 3.1 Probe Scheduler Evaluation",
         f"",
         f"Under a bounded probe budget, the scheduler evaluates three strategies to select candidate active probes:",
-        f"- **Discovery-Order:** Sequential first-fit baseline in order of arrival.",
-        f"- **Greedy Heuristic:** Sorts descending by efficiency ratio (`value / cost`).",
-        f"- **0/1 Knapsack Dynamic Programming:** Exact optimal subset selection using 2D DP recurrence $O(nB)$.",
+        f"- **Discovery-Order:** Sequential first-fit baseline in order of arrival (O(n)).",
+        f"- **Greedy Heuristic:** Sorts descending by efficiency ratio (`value / cost`) (O(n log n)).",
+        f"- **0/1 Knapsack Dynamic Programming:** Exact optimal subset selection using 2D DP recurrence (O(nB)).",
         f"",
     ])
 
     if sched:
-        lines.append("| Strategy | Probes Selected | Total Cost | Total Value | Budget | Optimal? |")
-        lines.append("|:---|:---:|:---:|:---:|:---:|:---:|")
+        lines.append("| Strategy | Selected / Total | Total Cost | Total Value | Budget | Guaranteed Optimal? | Matched DP Value? | Approx. Ratio |")
+        lines.append("|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
         for strat_key, strat_res in sched.items():
             name = strat_res.get("strategy", strat_key)
             sel = strat_res.get("selected_count", 0)
+            cand = strat_res.get("candidate_count", 0)
             cost = strat_res.get("total_cost", 0)
             val = strat_res.get("total_value", 0)
             bgt = strat_res.get("budget", 0)
-            opt = "✓ Yes" if strat_res.get("is_optimal") else "✗ Suboptimal"
-            lines.append(f"| **{name}** | {sel} | {cost} | {val} | {bgt} | {opt} |")
+            g_opt = "✓ Yes (DP)" if strat_res.get("guaranteed_optimal") else "✗ No (Heuristic)"
+            m_opt = "✓ Yes" if strat_res.get("matched_optimal_value", strat_res.get("is_optimal")) else "✗ Suboptimal"
+            ratio = f"{strat_res.get('approximation_ratio', 1.0) * 100:.1f}%"
+            lines.append(f"| **{name}** | {sel}/{cand} | {cost} | {val} | {bgt} | {g_opt} | {m_opt} | {ratio} |")
         lines.append("")
     else:
         lines.append("*No scheduler execution recorded for this mode.*")

@@ -12,7 +12,7 @@ and optimality verification.
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from models import ProbeCandidate
@@ -29,6 +29,11 @@ class ScheduleResult:
     candidate_count: int
     selected_count: int
     is_optimal: bool = False
+    guaranteed_optimal: bool = False
+    matched_optimal_value: bool = False
+    approximation_ratio: float = 1.0
+    budget_is_restrictive: bool = True
+    all_candidates: list[dict[str, Any]] = field(default_factory=list)
     runtime_seconds: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
@@ -40,8 +45,13 @@ class ScheduleResult:
             "total_value": self.total_value,
             "budget": self.budget,
             "is_optimal": self.is_optimal,
+            "guaranteed_optimal": self.guaranteed_optimal,
+            "matched_optimal_value": self.matched_optimal_value,
+            "approximation_ratio": self.approximation_ratio,
+            "budget_is_restrictive": self.budget_is_restrictive,
             "runtime_seconds": self.runtime_seconds,
             "selected_probe_ids": [p.probe_id for p in self.selected_probes],
+            "all_candidates": self.all_candidates,
         }
 
 
@@ -314,9 +324,45 @@ def compare_strategies(
     greedy_res = schedule_greedy(candidates, budget)
     discovery_res = schedule_discovery_order(candidates, budget)
 
-    # Annotate whether greedy or discovery reached the DP optimum
-    greedy_res.is_optimal = greedy_res.total_value == dp_res.total_value
-    discovery_res.is_optimal = discovery_res.total_value == dp_res.total_value
+    total_candidate_cost = sum(c.cost for c in candidates)
+    is_restrictive = budget < total_candidate_cost
+
+    cand_summaries = [
+        {
+            "probe_id": c.probe_id,
+            "host": c.host,
+            "port": c.port,
+            "cost": c.cost,
+            "value": c.value,
+            "efficiency_ratio": round(c.value / max(1, c.cost), 3),
+            "reason": c.reason,
+        }
+        for c in candidates
+    ]
+
+    # Knapsack DP is mathematically guaranteed optimal for 0/1 knapsack
+    dp_res.guaranteed_optimal = True
+    dp_res.matched_optimal_value = True
+    dp_res.approximation_ratio = 1.0
+    dp_res.is_optimal = True
+    dp_res.budget_is_restrictive = is_restrictive
+    dp_res.all_candidates = cand_summaries
+
+    # Greedy ratio has NO mathematical guarantee for discrete 0/1 items
+    greedy_res.guaranteed_optimal = False
+    greedy_res.matched_optimal_value = (greedy_res.total_value == dp_res.total_value)
+    greedy_res.is_optimal = greedy_res.matched_optimal_value
+    greedy_res.approximation_ratio = round(greedy_res.total_value / max(1, dp_res.total_value), 4)
+    greedy_res.budget_is_restrictive = is_restrictive
+    greedy_res.all_candidates = cand_summaries
+
+    # Discovery-order baseline (first-fit arrival order)
+    discovery_res.guaranteed_optimal = False
+    discovery_res.matched_optimal_value = (discovery_res.total_value == dp_res.total_value)
+    discovery_res.is_optimal = discovery_res.matched_optimal_value
+    discovery_res.approximation_ratio = round(discovery_res.total_value / max(1, dp_res.total_value), 4)
+    discovery_res.budget_is_restrictive = is_restrictive
+    discovery_res.all_candidates = cand_summaries
 
     return {
         "knapsack_dp": dp_res,

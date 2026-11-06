@@ -10,13 +10,14 @@ Safety principles:
 from __future__ import annotations
 
 import datetime
+import hashlib
 import logging
 import socket
 import ssl
 from typing import Any, Optional
 
 from config import config
-from models import ServiceEndpoint, normalize_ip
+from models import CollectionMethod, ServiceEndpoint, normalize_ip
 from banner.matcher import (
     AhoCorasick,
     Signature,
@@ -96,12 +97,21 @@ def grab_banner(
 
 
 def audit_http_headers(raw_banner: str) -> Optional[dict[str, Any]]:
-    """Parse HTTP headers to audit security headers and detect web technologies."""
+    """Parse HTTP headers with weighted scoring and redirect-aware policy evaluation."""
     if not raw_banner or not raw_banner.startswith("HTTP/"):
         return None
 
+    lines = raw_banner.splitlines()
+    status_line = lines[0] if lines else ""
+    status_code = None
+    parts = status_line.split()
+    if len(parts) >= 2 and parts[1].isdigit():
+        status_code = int(parts[1])
+
+    is_redirect = status_code in (301, 302, 303, 307, 308)
+
     headers: dict[str, str] = {}
-    for line in raw_banner.splitlines():
+    for line in lines[1:]:
         if ": " in line:
             k, v = line.split(": ", 1)
             headers[k.strip().lower()] = v.strip()
@@ -114,20 +124,6 @@ def audit_http_headers(raw_banner: str) -> Optional[dict[str, Any]]:
         "Referrer-Policy": "referrer-policy" in headers,
     }
 
-    present_count = sum(1 for v in sec_headers.values() if v)
-    if present_count == 5:
-        score = "Grade A+"
-    elif present_count == 4:
-        score = "Grade A"
-    elif present_count == 3:
-        score = "Grade B"
-    elif present_count == 2:
-        score = "Grade C"
-    elif present_count == 1:
-        score = "Grade D"
-    else:
-        score = "Grade F"
-
     frameworks: list[str] = []
     if "x-powered-by" in headers:
         xpb = headers["x-powered-by"]
@@ -138,6 +134,8 @@ def audit_http_headers(raw_banner: str) -> Optional[dict[str, Any]]:
             frameworks.append("Express.js")
         elif "asp.net" in xpb.lower():
             frameworks.append("ASP.NET")
+        elif "next.js" in xpb.lower():
+            frameworks.append("Next.js")
 
     if "set-cookie" in headers:
         sc = headers["set-cookie"].lower()
@@ -156,8 +154,8 @@ def audit_http_headers(raw_banner: str) -> Optional[dict[str, Any]]:
         if "__cf_bm" in sc or "_cfduid" in sc:
             frameworks.append("Cloudflare")
 
-    if "server" in headers:
-        srv = headers["server"]
+    srv = headers.get("server")
+    if srv:
         if "cloudflare" in srv.lower():
             frameworks.append("Cloudflare CDN/WAF")
         elif "nginx" in srv.lower():
@@ -166,42 +164,85 @@ def audit_http_headers(raw_banner: str) -> Optional[dict[str, Any]]:
             frameworks.append("Apache")
         elif "caddy" in srv.lower():
             frameworks.append("Caddy")
+        elif "railway" in srv.lower():
+            frameworks.append("Railway Edge")
 
     unique_frameworks = sorted(list(set(frameworks)))
 
+    # Header Scoring Logic
+    if is_redirect:
+        target_loc = headers.get("location", "")
+        if target_loc.startswith("https://"):
+            score = "Grade A (Secure HTTPS Redirect)"
+            evaluation_note = "Valid HTTP->HTTPS redirect. Per RFC 6797 §7.2, HSTS is prohibited on plain HTTP and evaluated on the target HTTPS endpoint."
+        else:
+            score = "Grade C (Insecure Redirect)"
+            evaluation_note = f"Redirect target is not HTTPS: '{target_loc}'."
+    else:
+        # Weighted Scoring Model for Application Endpoints (Total = 100)
+        # Content-Security-Policy: 30 pts (primary defense against XSS)
+        # Strict-Transport-Security: 25 pts (prevents MITM downgrade)
+        # X-Frame-Options: 15 pts (clickjacking protection)
+        # X-Content-Type-Options: 15 pts (MIME-sniffing protection)
+        # Referrer-Policy: 15 pts (privacy preservation)
+        points = 0
+        if sec_headers["Content-Security-Policy"]:
+            points += 30
+        if sec_headers["Strict-Transport-Security"]:
+            points += 25
+        if sec_headers["X-Frame-Options"]:
+            points += 15
+        if sec_headers["X-Content-Type-Options"]:
+            points += 15
+        if sec_headers["Referrer-Policy"]:
+            points += 15
+
+        if points >= 95:
+            score = "Grade A+"
+        elif points >= 85:
+            score = "Grade A"
+        elif points >= 70:
+            score = "Grade B (Hardening Opportunity: Missing CSP)" if not sec_headers["Content-Security-Policy"] else "Grade B"
+        elif points >= 50:
+            score = "Grade C"
+        elif points >= 30:
+            score = "Grade D"
+        else:
+            score = "Grade F"
+        evaluation_note = f"Weighted header score: {points}/100. CSP={'present' if sec_headers['Content-Security-Policy'] else 'missing'}."
+
     return {
+        "status_code": status_code,
+        "is_redirect": is_redirect,
+        "location": headers.get("location"),
+        "server_header": srv,
         "security_headers": sec_headers,
         "security_score": score,
+        "evaluation_note": evaluation_note,
         "detected_frameworks": unique_frameworks,
     }
 
 
 def inspect_tls_certificate(host: str, port: int = 443, timeout: float = 4.0) -> Optional[dict[str, Any]]:
-    """Retrieve and parse X.509 TLS certificate directly over socket."""
+    """Retrieve and thoroughly parse X.509 TLS certificate directly over socket."""
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
 
     cert: Optional[dict[str, Any]] = None
+    raw_der: Optional[bytes] = None
+    cipher_suite: Optional[str] = None
+    tls_version: Optional[str] = None
+
     try:
         with socket.create_connection((host, port), timeout=timeout) as raw_sock:
             with ctx.wrap_socket(raw_sock, server_hostname=host) as ssock:
                 cert = ssock.getpeercert()
-    except ssl.SSLCertVerificationError:
-        try:
-            ctx.verify_mode = ssl.CERT_NONE
-            with socket.create_connection((host, port), timeout=timeout) as raw_sock:
-                with ctx.wrap_socket(raw_sock, server_hostname=host) as ssock:
-                    return {
-                        "issuer": "Self-Signed / Untrusted Authority",
-                        "subject": host,
-                        "valid_from": "Unknown",
-                        "valid_until": "Unknown",
-                        "days_remaining": 0,
-                        "is_expired": False,
-                        "sans": [host],
-                    }
-        except Exception:
-            return None
+                raw_der = ssock.getpeercert(binary_form=True)
+                tls_version = ssock.version()
+                cipher_tuple = ssock.cipher()
+                if cipher_tuple:
+                    cipher_suite = cipher_tuple[0]
     except Exception as exc:
         logger.debug("TLS certificate extraction failed for %s:%d: %s", host, port, exc)
         return None
@@ -210,12 +251,13 @@ def inspect_tls_certificate(host: str, port: int = 443, timeout: float = 4.0) ->
         return None
 
     issuer_name = "Unknown Issuer"
+    issuer_dict = {}
     for item in cert.get("issuer", ()):
         for k, v in item:
+            issuer_dict[k] = v
             if k == "organizationName":
                 issuer_name = v
-                break
-            elif k == "commonName":
+            elif k == "commonName" and issuer_name == "Unknown Issuer":
                 issuer_name = v
 
     subject_cn = host
@@ -244,14 +286,31 @@ def inspect_tls_certificate(host: str, port: int = 443, timeout: float = 4.0) ->
         if len(item) == 2 and item[0] == "DNS":
             sans.append(item[1])
 
+    fp_sha256 = hashlib.sha256(raw_der).hexdigest() if raw_der else None
+    serial_hex = hex(cert.get("serialNumber", 0)) if "serialNumber" in cert else None
+
+    # Determine certificate status
+    if is_expired:
+        cert_status = "EXPIRED"
+    elif days_remaining <= 14:
+        cert_status = "EXPIRING_SOON"
+    else:
+        cert_status = "VALID"
+
     return {
         "issuer": issuer_name,
+        "issuer_details": issuer_dict,
         "subject": subject_cn,
         "valid_from": not_before_str,
         "valid_until": not_after_str,
         "days_remaining": days_remaining,
         "is_expired": is_expired,
+        "status": cert_status,
         "sans": sorted(list(set(sans))),
+        "serial_number": serial_hex,
+        "fingerprint_sha256": fp_sha256,
+        "tls_version": tls_version,
+        "cipher_suite": cipher_suite,
     }
 
 
@@ -262,7 +321,7 @@ def identify_service(
     matcher: Optional[AhoCorasick] = None,
     tls_cert_info: Optional[dict[str, Any]] = None,
 ) -> ServiceEndpoint:
-    """Analyze collected banner using Aho-Corasick matching and version extraction."""
+    """Analyze collected banner using Aho-Corasick matching, version extraction, and HTTP headers."""
     if matcher is None:
         matcher = AhoCorasick(case_sensitive=False)
         sigs = load_signatures_from_file(config.SIGNATURES_FILE)
@@ -291,19 +350,62 @@ def identify_service(
     security_headers = header_audit.get("security_headers") if header_audit else None
     security_score = header_audit.get("security_score") if header_audit else None
     detected_frameworks = header_audit.get("detected_frameworks") if header_audit else []
+    server_header = header_audit.get("server_header") if header_audit else None
+    http_status = header_audit.get("status_code") if header_audit else None
+    is_redirect = header_audit.get("is_redirect", False) if header_audit else False
+
+    # Fallback to extracted HTTP technologies if Aho-Corasick has no signature
+    if not detected_product:
+        if detected_frameworks:
+            detected_product = detected_frameworks[0]
+        elif server_header:
+            detected_product = server_header
+
+    if service_name == "unknown":
+        if port in (443, 8443) or tls_cert_info:
+            service_name = "https"
+        elif port in (80, 8080):
+            service_name = "http"
+        elif port == 22:
+            service_name = "ssh"
+        elif port == 21:
+            service_name = "ftp"
+        elif port == 25:
+            service_name = "smtp"
+        elif port == 3306:
+            service_name = "mysql"
+
+    # Documented Confidence Model:
+    # 0.95: Direct live socket connect + valid banner + version or header proof
+    # 0.90: Direct banner grabbed with valid HTTP response
+    # 0.85: Valid TLS handshake confirmed
+    # 0.70: Basic port open response
+    if detected_product and detected_version:
+        conf = 0.95
+    elif detected_product or detected_frameworks:
+        conf = 0.90
+    elif tls_cert_info:
+        conf = 0.85
+    else:
+        conf = 0.70
 
     return ServiceEndpoint(
         host=host,
         port=port,
-        protocol="tcp",
+        protocol=detected_protocol,
         service_name=service_name,
         product=detected_product,
         version=detected_version,
         banner=banner,
-        confidence=0.9 if detected_product else 0.5,
+        confidence=conf,
         source="banner_grabber",
+        method=CollectionMethod.ACTIVE,
         security_headers=security_headers,
         detected_frameworks=detected_frameworks,
         security_score=security_score,
         tls_cert_info=tls_cert_info,
+        server_header=server_header,
+        http_status=http_status,
+        is_redirect=is_redirect,
+        verified_live=True,
     )

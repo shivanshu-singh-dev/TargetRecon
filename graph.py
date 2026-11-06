@@ -337,12 +337,20 @@ class AssetGraph:
 
         # Check 2: Indexed service unconfirmed during authorized active scan
         if active_scan_performed:
+            # Build set of ports verified active
+            active_ports_verified: set[int] = set()
+            for node_id, node in self.nodes.items():
+                if node.node_type == "Service" and node.properties.get("verified_active"):
+                    p = node.properties.get("port")
+                    if p:
+                        active_ports_verified.add(p)
+
             for node_id, node in self.nodes.items():
                 if node.node_type == "Service":
                     source = node.properties.get("source", "").lower()
                     if "shodan" in source or "censys" in source:
-                        # Check if verified by active scan
-                        verified = node.properties.get("verified_active", False)
+                        port = node.properties.get("port")
+                        verified = node.properties.get("verified_active", False) or (port in active_ports_verified)
                         if not verified:
                             findings.append(
                                 ConsistencyFinding(
@@ -377,6 +385,8 @@ class AssetGraph:
                         )
 
         # Check 4: Conflicting observations of same asset from inventory
+        # Note: MX, NS, and TXT are inherently multi-record RRset collections and are not conflicts.
+        # True conflicts occur when multiple independent sources observe contradictory values.
         if inventory:
             obs_by_asset: dict[str, list[Any]] = collections.defaultdict(list)
             for obs in inventory.observations:
@@ -384,8 +394,9 @@ class AssetGraph:
 
             for asset_id, obs_list in obs_by_asset.items():
                 distinct_values = set(str(o.normalized_value) for o in obs_list if o.normalized_value)
-                if len(distinct_values) > 1 and not asset_id.endswith(":NS"):
-                    sources = list(set(o.source for o in obs_list))
+                sources = list(set(o.source for o in obs_list))
+                is_multi_record_dns = any(asset_id.endswith(t) or f"{t}:" in asset_id for t in (":MX", ":NS", ":TXT", ":SOA", ":CAA"))
+                if len(distinct_values) > 1 and len(sources) > 1 and not is_multi_record_dns:
                     findings.append(
                         ConsistencyFinding(
                             finding_type=DiscrepancyType.CONFLICTING_OBSERVATIONS,

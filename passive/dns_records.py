@@ -34,13 +34,13 @@ logger = logging.getLogger(__name__)
 def query_dns_records(
     target_host: str,
     inventory: DiscoveredAssetInventory,
-    record_types: tuple[str, ...] = ("A", "AAAA", "MX", "NS", "TXT"),
+    record_types: tuple[str, ...] = ("A", "AAAA", "CNAME", "MX", "NS", "TXT", "SOA", "CAA"),
     timeout: Optional[float] = None,
 ) -> list[DNSRecord]:
-    """Query standard DNS record types for a given host or domain name.
+    """Query comprehensive DNS record types for a given host or domain name.
 
-    Returns list of discovered DNSRecord models and adds discovered IPs
-    and records to the central inventory.
+    Returns list of discovered DNSRecord models, captures MX preferences,
+    audits DMARC email policies, and updates the central inventory.
     """
     clean_host = normalize_domain(target_host)
     if not clean_host:
@@ -58,15 +58,20 @@ def query_dns_records(
             answers = resolver.resolve(clean_host, r_type)
             for rdata in answers:
                 val = str(rdata).strip().strip('"')
+                priority = None
 
-                # Clean MX priorities (e.g. '10 mail.example.com.' -> 'mail.example.com')
+                # Capture MX priorities (e.g. '10 mail.example.com.' -> priority 10, target 'mail.example.com')
                 if r_type == "MX":
                     parts = val.split()
                     if len(parts) >= 2:
+                        try:
+                            priority = int(parts[0])
+                        except ValueError:
+                            pass
                         val = parts[1].rstrip(".")
 
-                # Clean NS trailing dot
-                if r_type == "NS":
+                # Clean trailing dots
+                if r_type in ("NS", "CNAME", "SOA"):
                     val = val.rstrip(".")
 
                 record = DNSRecord(
@@ -75,6 +80,7 @@ def query_dns_records(
                     value=val,
                     source="dns_resolver",
                     ttl=getattr(answers, "ttl", None),
+                    priority=priority,
                 )
                 results.append(record)
                 inventory.add_dns_record(record)
@@ -85,8 +91,13 @@ def query_dns_records(
                     if ip_norm:
                         inventory.add_ip(ip_norm, source="dns_resolver", method=CollectionMethod.PASSIVE)
 
+                # Add CNAME target to inventory if it shares domain suffix
+                if r_type == "CNAME":
+                    clean_cname = normalize_domain(val)
+                    if clean_cname and clean_cname.endswith(clean_host):
+                        inventory.add_subdomain(clean_cname, source="dns_resolver", method=CollectionMethod.PASSIVE)
+
         except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
-            # Normal DNS scenario: record type or host does not exist
             pass
         except dns.exception.Timeout:
             msg = f"DNS query timeout for {clean_host} ({r_type}) after {timeout_val}s."
@@ -96,5 +107,24 @@ def query_dns_records(
             msg = f"DNS query error for {clean_host} ({r_type}): {exc}"
             logger.debug(msg)
             inventory.add_error("dns_resolver", msg)
+
+    # Query DMARC policy under _dmarc.<target_host>
+    dmarc_host = f"_dmarc.{clean_host}"
+    try:
+        dmarc_answers = resolver.resolve(dmarc_host, "TXT")
+        for rdata in dmarc_answers:
+            val = str(rdata).strip().strip('"')
+            if "v=dmarc" in val.lower():
+                record = DNSRecord(
+                    record_type="TXT",
+                    host=dmarc_host,
+                    value=val,
+                    source="dns_resolver",
+                    ttl=getattr(dmarc_answers, "ttl", None),
+                )
+                results.append(record)
+                inventory.add_dns_record(record)
+    except Exception:
+        pass  # DMARC missing is common, silent fallback
 
     return results

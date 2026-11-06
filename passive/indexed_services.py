@@ -114,8 +114,10 @@ def query_shodan_host(
                 product=item.get("product"),
                 version=item.get("version"),
                 banner=item.get("data"),
-                confidence=0.85,
+                confidence=0.75,
                 source="shodan_indexed",
+                method=CollectionMethod.PASSIVE,
+                verified_live=False,
             )
             services.append(svc)
             inventory.add_service(svc)
@@ -264,8 +266,10 @@ def query_censys_host(
                 protocol=proto,
                 service_name=s.get("service_name") or prod or "unknown",
                 product=prod,
-                confidence=0.85,
+                confidence=0.75,
                 source="censys_indexed",
+                method=CollectionMethod.PASSIVE,
+                verified_live=False,
             )
             services.append(svc)
             inventory.add_service(svc)
