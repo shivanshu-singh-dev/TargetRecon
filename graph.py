@@ -1,6 +1,6 @@
 """Asset correlation graph using an adjacency-list representation.
 
-Demonstrates:
+Algorithmic Contributions:
 - Multi-relational asset graph representing domains, subdomains, IPs, endpoints, and services.
 - From-scratch BFS and DFS traversals with O(V + E) complexity bounds.
 - Path tracing between domains and services.

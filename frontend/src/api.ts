@@ -47,7 +47,7 @@ export async function cancelRun(runId: string): Promise<{ message: string }> {
 
 export async function createRun(data: {
   target_domain: string;
-  mode: 'demo' | 'passive' | 'active';
+  mode: 'simulation' | 'passive' | 'active';
   budget?: number;
   confirm_active?: boolean;
   scope_rules?: string[];

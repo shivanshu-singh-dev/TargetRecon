@@ -1,6 +1,6 @@
 """Banner pattern matching using Aho-Corasick and Naive baseline algorithms.
 
-Demonstrates:
+Algorithmic Contributions:
 - Aho-Corasick multi-pattern string matching constructed from scratch.
   - Trie structure with failure links and dictionary/output links.
   - Construction complexity: O(P) where P is the sum of pattern lengths.
@@ -181,7 +181,7 @@ class NaiveMatcher:
 
     Complexity:
     - Scanning time: O(K * L) where K is signature count and L is text length.
-    - Demonstrates equivalence and provides a benchmark baseline for Aho-Corasick.
+    - Verifies equivalence and provides a benchmark baseline for Aho-Corasick.
     """
 
     def __init__(self, case_sensitive: bool = False) -> None:

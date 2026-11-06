@@ -126,3 +126,58 @@ def test_version_extraction():
     assert extract_software_version("220 vsftpd 3.0.5 ready", "vsftpd") == "3.0.5"
     assert extract_software_version("220 ESMTP Postfix 3.8.1", "Postfix") == "3.8.1"
     assert extract_software_version("No version info present", "OpenSSH") is None
+
+
+def test_http_security_header_and_stack_audit():
+    """Verify HTTP security header auditing and framework identification."""
+    from banner.grabber import audit_http_headers, identify_service
+
+    # Sample hardened HTTP response
+    secure_banner = (
+        "HTTP/1.1 200 OK\r\n"
+        "Server: cloudflare\r\n"
+        "Strict-Transport-Security: max-age=31536000; includeSubDomains\r\n"
+        "Content-Security-Policy: default-src 'self'\r\n"
+        "X-Frame-Options: DENY\r\n"
+        "X-Content-Type-Options: nosniff\r\n"
+        "Referrer-Policy: strict-origin-when-cross-origin\r\n"
+        "X-Powered-By: PHP/8.2.0\r\n"
+        "Content-Type: text/html\r\n"
+    )
+
+    audit = audit_http_headers(secure_banner)
+    assert audit is not None
+    assert audit["security_score"] == "Grade A+"
+    assert audit["security_headers"]["Strict-Transport-Security"] is True
+    assert audit["security_headers"]["Content-Security-Policy"] is True
+    assert "PHP" in audit["detected_frameworks"]
+    assert "Cloudflare CDN/WAF" in audit["detected_frameworks"]
+
+    # Sample insecure HTTP response
+    insecure_banner = (
+        "HTTP/1.1 200 OK\r\n"
+        "Server: Apache/2.4.52\r\n"
+        "Content-Type: text/html\r\n"
+    )
+    insecure_audit = audit_http_headers(insecure_banner)
+    assert insecure_audit is not None
+    assert insecure_audit["security_score"] == "Grade F"
+    assert insecure_audit["security_headers"]["Strict-Transport-Security"] is False
+    assert "Apache" in insecure_audit["detected_frameworks"]
+
+    # Verify identify_service integration with TLS cert
+    mock_tls = {
+        "issuer": "Let's Encrypt",
+        "subject": "example.com",
+        "valid_from": "Jan 01 00:00:00 2026 GMT",
+        "valid_until": "Dec 31 00:00:00 2026 GMT",
+        "days_remaining": 70,
+        "is_expired": False,
+        "sans": ["example.com", "www.example.com"],
+    }
+    svc = identify_service("example.com", 443, secure_banner, tls_cert_info=mock_tls)
+    assert svc.security_score == "Grade A+"
+    assert svc.tls_cert_info is not None
+    assert svc.tls_cert_info["issuer"] == "Let's Encrypt"
+    assert "www.example.com" in svc.tls_cert_info["sans"]
+    assert "PHP" in svc.detected_frameworks

@@ -147,6 +147,10 @@ class ServiceEndpoint:
     timestamp: str = field(
         default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
     )
+    security_headers: Optional[dict[str, bool]] = None
+    detected_frameworks: Optional[list[str]] = None
+    security_score: Optional[str] = None
+    tls_cert_info: Optional[dict[str, Any]] = None
 
     @property
     def endpoint_id(self) -> str:
@@ -161,10 +165,14 @@ class ServiceEndpoint:
             "service_name": self.service_name,
             "product": self.product,
             "version": self.version,
-            "banner": self.banner[:100] + "..." if self.banner and len(self.banner) > 100 else self.banner,
+            "banner": self.banner,
             "confidence": self.confidence,
             "source": self.source,
             "timestamp": self.timestamp,
+            "security_headers": self.security_headers,
+            "detected_frameworks": self.detected_frameworks or [],
+            "security_score": self.security_score,
+            "tls_cert_info": self.tls_cert_info,
         }
 
 

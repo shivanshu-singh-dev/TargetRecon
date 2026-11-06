@@ -1,25 +1,56 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar, PageId } from './components/Sidebar';
 import { Header } from './components/Header';
-import { OverviewPage } from './pages/OverviewPage';
-import { NewRunPage } from './pages/NewRunPage';
-import { AssetInventoryPage } from './pages/AssetInventoryPage';
-import { GraphPage } from './pages/GraphPage';
-import { AlgorithmsLabPage } from './pages/AlgorithmsLabPage';
-import { FindingsPage } from './pages/FindingsPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { ReconRunPage } from './pages/ReconRunPage';
+import { SubdomainPage } from './pages/SubdomainPage';
+import { ServiceMapPage } from './pages/ServiceMapPage';
+import { DNSRecordsPage } from './pages/DNSRecordsPage';
+import { AssetGraphPage } from './pages/AssetGraphPage';
+import { AlgorithmsPage } from './pages/AlgorithmsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { fetchHealth, fetchRuns, fetchRunDetails } from './api';
 import { HealthStatus, RunSummary, RunDetails } from './types';
 
 export const App: React.FC = () => {
-  const [activePage, setActivePage] = useState<PageId>('overview');
+  const [activePage, setActivePage] = useState<PageId>('dashboard');
+  const [history, setHistory] = useState<PageId[]>(['dashboard']);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>(undefined);
   const [currentRun, setCurrentRun] = useState<RunDetails | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isDark, setIsDark] = useState(true);
 
-  // Load initial health and runs list
+  // Apply dark class to <html>
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDark]);
+
+  const toggleTheme = () => setIsDark((d) => !d);
+
+  const handleNavigate = (nextPage: PageId) => {
+    if (nextPage === activePage) return;
+    setHistory((prev) => [...prev, nextPage]);
+    setActivePage(nextPage);
+  };
+
+  const handleGoBack = () => {
+    if (history.length > 1) {
+      const newHistory = [...history];
+      newHistory.pop();
+      const prevPage = newHistory[newHistory.length - 1];
+      setHistory(newHistory);
+      setActivePage(prevPage);
+    }
+  };
+
+  const canGoBack = history.length > 1;
+
   const loadInitialData = async () => {
     try {
       setIsRefreshing(true);
@@ -42,10 +73,8 @@ export const App: React.FC = () => {
     loadInitialData();
   }, []);
 
-  // Fetch full details whenever selectedRunId changes
   useEffect(() => {
     if (!selectedRunId) return;
-
     fetchRunDetails(selectedRunId)
       .then((details) => setCurrentRun(details))
       .catch((err) => console.error('Failed to load run details:', err));
@@ -58,21 +87,19 @@ export const App: React.FC = () => {
   const handleRunCreated = async (newRunId: string) => {
     await loadInitialData();
     setSelectedRunId(newRunId);
-    setActivePage('overview');
+    handleNavigate('dashboard');
   };
 
   const activeRunCount = runs.filter((r) => r.status === 'running').length;
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
-      {/* Sidebar */}
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden font-sans">
       <Sidebar
         activePage={activePage}
-        onSelectPage={setActivePage}
+        onSelectPage={handleNavigate}
         activeRunCount={activeRunCount}
       />
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header
           health={health}
@@ -81,36 +108,46 @@ export const App: React.FC = () => {
           onSelectRun={handleSelectRun}
           onRefresh={loadInitialData}
           isRefreshing={isRefreshing}
+          isDark={isDark}
+          onToggleTheme={toggleTheme}
+          activePage={activePage}
+          onNavigate={handleNavigate}
+          canGoBack={canGoBack}
+          onGoBack={handleGoBack}
         />
 
-        <main className="flex-1 overflow-y-auto bg-slate-950/90">
-          {activePage === 'overview' && (
-            <OverviewPage
+        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950/90">
+          {activePage === 'dashboard' && (
+            <DashboardPage
               currentRun={currentRun}
               runs={runs}
-              onNavigate={setActivePage}
+              onNavigate={handleNavigate}
               onSelectRun={handleSelectRun}
             />
           )}
 
-          {activePage === 'new-run' && (
-            <NewRunPage onRunCreated={handleRunCreated} />
+          {activePage === 'recon-run' && (
+            <ReconRunPage onRunCreated={handleRunCreated} />
           )}
 
-          {activePage === 'inventory' && (
-            <AssetInventoryPage currentRun={currentRun} />
+          {activePage === 'subdomains' && (
+            <SubdomainPage currentRun={currentRun} />
           )}
 
-          {activePage === 'graph' && (
-            <GraphPage currentRun={currentRun} />
+          {activePage === 'service-map' && (
+            <ServiceMapPage currentRun={currentRun} />
+          )}
+
+          {activePage === 'dns-records' && (
+            <DNSRecordsPage currentRun={currentRun} />
+          )}
+
+          {activePage === 'asset-graph' && (
+            <AssetGraphPage currentRun={currentRun} />
           )}
 
           {activePage === 'algorithms' && (
-            <AlgorithmsLabPage />
-          )}
-
-          {activePage === 'findings' && (
-            <FindingsPage currentRun={currentRun} />
+            <AlgorithmsPage />
           )}
 
           {activePage === 'reports' && (

@@ -8,8 +8,9 @@ export interface HealthStatus {
 
 export interface RunSummary {
   run_id: string;
+  run_number?: number;
   target_domain: string;
-  mode: 'demo' | 'passive' | 'active';
+  mode: 'simulation' | 'passive' | 'active';
   budget: number;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   start_time: string;
@@ -40,6 +41,18 @@ export interface ServiceEndpoint {
   confidence: number;
   source: string;
   timestamp?: string;
+  security_headers?: Record<string, boolean>;
+  detected_frameworks?: string[];
+  security_score?: string;
+  tls_cert_info?: {
+    issuer?: string;
+    subject?: string;
+    valid_from?: string;
+    valid_until?: string;
+    days_remaining?: number;
+    is_expired?: boolean;
+    sans?: string[];
+  };
 }
 
 export interface Observation {
@@ -123,8 +136,9 @@ export interface InventoryData {
 
 export interface RunDetails {
   run_id: string;
+  run_number?: number;
   target_domain: string;
-  mode: 'demo' | 'passive' | 'active';
+  mode: 'simulation' | 'passive' | 'active';
   budget: number;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   start_time: string;

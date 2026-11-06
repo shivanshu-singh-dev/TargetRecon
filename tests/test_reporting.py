@@ -66,7 +66,7 @@ def test_report_json_and_markdown_generation():
 
     report_dict = build_report_data(
         target_domain="example.com",
-        mode="demo",
+        mode="simulation",
         inventory_data=inventory_data,
         scheduler_comparison=scheduler_data,
         graph_data=graph_data,

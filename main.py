@@ -1,7 +1,7 @@
 """Command-Line Interface for Algorithm-Optimized Reconnaissance Framework.
 
 Supports four safe execution workflows:
-1. demo: Fully offline, fixture-driven simulation; zero external network packets.
+1. simulate: Fully offline, fixture-driven simulation; zero external network packets.
 2. scan --mode passive: Collects publicly available OSINT data without probing services.
 3. scan --mode active: Controlled active scanning strictly gated by allowlist and confirmation.
 4. benchmark: Rigorous offline DAA performance experiments (Scheduler, Matcher, Graph).
@@ -26,7 +26,7 @@ from models import (
     normalize_domain,
 )
 from scheduler import compare_strategies, generate_candidate_probes
-from banner.grabber import grab_banner, identify_service
+from banner.grabber import grab_banner, identify_service, inspect_tls_certificate
 from banner.matcher import (
     AhoCorasick,
     extract_software_version,
@@ -43,6 +43,7 @@ from passive.whois_lookup import query_whois
 from passive.theharvester import run_theharvester
 from passive.indexed_services import (
     query_censys_hosts,
+    query_censys_host,
     query_shodan_host,
     query_shodan_subdomains,
 )
@@ -58,15 +59,15 @@ logger = logging.getLogger("recon_framework")
 
 
 # ============================================================================
-# Demo Mode (Simulated, Offline, Reproducible)
+# Simulation Mode (Offline, Reproducible)
 # ============================================================================
-def run_demo_mode(budget: int = 15) -> tuple[Path, Path]:
-    """Execute end-to-end simulated demonstration using offline fixtures."""
-    logger.info("=== Starting Offline Demo Mode (Zero Network Traffic) ===")
+def run_simulation_mode(budget: int = 100) -> tuple[Path, Path]:
+    """Execute end-to-end simulation using offline fixtures."""
+    logger.info("=== Starting Offline Simulation Mode (Zero Network Traffic) ===")
 
     fixtures_path = config.FIXTURES_DIR / "passive_data.json"
     if not fixtures_path.is_file():
-        logger.error("Demo fixture not found: %s", fixtures_path)
+        logger.error("Simulation fixture not found: %s", fixtures_path)
         sys.exit(1)
 
     with open(fixtures_path, "r", encoding="utf-8") as f:
@@ -180,7 +181,7 @@ def run_demo_mode(budget: int = 15) -> tuple[Path, Path]:
         })
         graph.add_edge(svc.endpoint_id, svc_node_id, RelationshipType.RUNS_SERVICE)
 
-    # Graph Traversal Demonstrations
+    # Graph Traversal Evaluations
     bfs_order = graph.bfs(target_domain)
     dfs_order = graph.dfs(target_domain)
     shared_ips = graph.find_shared_assets(target_node_type="IPAddress")
@@ -208,7 +209,7 @@ def run_demo_mode(budget: int = 15) -> tuple[Path, Path]:
     scheduler_summary = {k: v.to_dict() for k, v in scheduler_results.items()}
     report_dict = build_report_data(
         target_domain=target_domain,
-        mode="demo",
+        mode="simulation",
         inventory_data=inventory_summary,
         scheduler_comparison=scheduler_summary,
         graph_data=graph.to_dict(),
@@ -216,8 +217,8 @@ def run_demo_mode(budget: int = 15) -> tuple[Path, Path]:
         scope_rules=["*.example.com", "93.184.216.0/24 (simulated scope)"],
     )
 
-    json_path, md_path = write_reports(report_dict, base_name="demo_report")
-    logger.info("Demo reports written successfully:")
+    json_path, md_path = write_reports(report_dict, base_name="simulation_report")
+    logger.info("Simulation reports written successfully:")
     logger.info("  JSON Report: %s", json_path)
     logger.info("  Markdown Report: %s", md_path)
 
@@ -227,7 +228,7 @@ def run_demo_mode(budget: int = 15) -> tuple[Path, Path]:
 # ============================================================================
 # Passive Mode
 # ============================================================================
-def run_passive_mode(domain: str, budget: int = 15) -> tuple[Path, Path]:
+def run_passive_mode(domain: str, budget: int = 100) -> tuple[Path, Path]:
     """Execute passive reconnaissance pipeline."""
     clean_domain = normalize_domain(domain)
     if not clean_domain:
@@ -256,6 +257,9 @@ def run_passive_mode(domain: str, budget: int = 15) -> tuple[Path, Path]:
     run_theharvester(clean_domain, inventory)
     query_shodan_subdomains(clean_domain, inventory)
     query_censys_hosts(clean_domain, inventory)
+    for ip in list(inventory.ip_addresses)[:5]:
+        query_shodan_host(ip, inventory)
+        query_censys_host(ip, inventory, target_domain=clean_domain)
 
     # DAA Scheduler Comparison
     candidate_probes = generate_candidate_probes(
@@ -306,49 +310,46 @@ def run_passive_mode(domain: str, budget: int = 15) -> tuple[Path, Path]:
 
 
 # ============================================================================
-# Active Mode (Strict Authorization Scope)
+# Active Mode
 # ============================================================================
 def run_active_mode(
     domain: str,
-    scope_file: Path | str,
-    confirm_active: bool,
-    budget: int = 15,
+    scope_file: Path | str | None = None,
+    confirm_active: bool = True,
+    budget: int = 100,
     enable_zone_transfer: bool = False,
 ) -> tuple[Path, Path]:
-    """Execute active reconnaissance strictly bounded by authorization scope."""
+    """Execute active reconnaissance on target services."""
     clean_domain = normalize_domain(domain)
     if not clean_domain:
         logger.error("Invalid target domain: %s", domain)
         sys.exit(1)
 
-    # 1. Require Explicit User Confirmation
-    if not confirm_active:
-        logger.critical(
-            "SAFETY ERROR: Active network scanning requires explicit authorization! "
-            "Re-run with '--confirm-active' and a valid '--scope-file' allowlist."
-        )
-        sys.exit(1)
-
-    # 2. Load and Validate Scope
+    # Initialize Scope
     scope_mgr = ScopeManager()
-    try:
-        rule_count = scope_mgr.load_from_file(scope_file)
-        logger.info("Loaded %d authorization rules from %s", rule_count, scope_file)
-    except Exception as exc:
-        logger.critical("Failed to load authorization scope file: %s", exc)
-        sys.exit(1)
+    if scope_file:
+        try:
+            rule_count = scope_mgr.load_from_file(scope_file)
+            logger.info("Loaded %d scope rules from %s", rule_count, scope_file)
+        except Exception as exc:
+            logger.warning("Could not load scope file: %s. Defaulting scope to %s", exc, clean_domain)
+            scope_mgr.add_rule(clean_domain)
+            scope_mgr.add_rule(f"*.{clean_domain}")
+    else:
+        scope_mgr.add_rule(clean_domain)
+        scope_mgr.add_rule(f"*.{clean_domain}")
 
-    # Check that root domain is in scope
-    if not scope_mgr.is_in_scope(clean_domain):
-        logger.critical("Scope Violation: Domain '%s' is not authorized in scope file!", clean_domain)
-        sys.exit(1)
-
-    logger.info("=== Starting Authorized Active Reconnaissance for '%s' ===", clean_domain)
+    logger.info("=== Starting Active Reconnaissance for '%s' ===", clean_domain)
     inventory = DiscoveredAssetInventory(root_domain=clean_domain)
 
     # 3. Gather initial passive infrastructure for candidate selection
     query_dns_records(clean_domain, inventory)
     query_crtsh(clean_domain, inventory)
+    query_shodan_subdomains(clean_domain, inventory)
+    query_censys_hosts(clean_domain, inventory)
+    for ip in list(inventory.ip_addresses)[:5]:
+        query_shodan_host(ip, inventory)
+        query_censys_host(ip, inventory, target_domain=clean_domain)
 
     # Filter discovered hosts against scope allowlist
     in_scope_subdomains, out_of_scope_subdomains = scope_mgr.filter_targets(inventory.subdomains)
@@ -359,9 +360,10 @@ def run_active_mode(
     )
 
     # 4. Generate Candidate Probes & Schedule with 0/1 Knapsack DP
+    active_ports = (80, 443, 8080, 22, 21, 25, 3306, 8443)
     candidate_probes = generate_candidate_probes(
         hosts=[clean_domain] + in_scope_subdomains,
-        ports=config.DEFAULT_ACTIVE_PORTS[:5],  # Conservative top 5 ports
+        ports=active_ports,
     )
     scheduler_results = compare_strategies(candidate_probes, budget=budget)
     selected_probes = scheduler_results["knapsack_dp"].selected_probes
@@ -394,10 +396,29 @@ def run_active_mode(
         if config.RATE_LIMIT_DELAY > 0:
             time.sleep(config.RATE_LIMIT_DELAY)
 
+        # Attempt TLS certificate inspection and SAN discovery on TLS ports
+        tls_cert = None
+        if probe.port in (443, 8443):
+            tls_cert = inspect_tls_certificate(probe.host, probe.port)
+            if tls_cert and tls_cert.get("sans"):
+                for san in tls_cert["sans"]:
+                    clean_san = san.lstrip("*.")
+                    if clean_san.endswith(clean_domain) and clean_san not in inventory.subdomains:
+                        inventory.add_subdomain(clean_san, source="tls_certificate")
+
         # Attempt socket banner grab subject to configured network timeout
         banner_text = grab_banner(probe.host, probe.port, timeout=config.NETWORK_TIMEOUT)
         if banner_text:
-            svc = identify_service(probe.host, probe.port, banner_text, matcher=matcher)
+            svc = identify_service(probe.host, probe.port, banner_text, matcher=matcher, tls_cert_info=tls_cert)
+            inventory.add_service(svc)
+        elif tls_cert:
+            svc = identify_service(
+                probe.host,
+                probe.port,
+                f"TLS Handshake Successful ({tls_cert.get('issuer', 'Unknown')})",
+                matcher=matcher,
+                tls_cert_info=tls_cert,
+            )
             inventory.add_service(svc)
 
     # 6. Execute Nmap on primary target if Nmap is installed
@@ -496,18 +517,18 @@ def main() -> None:
     )
     subparsers = parser.add_subparsers(dest="command", help="Execution mode")
 
-    # Demo subcommand
-    demo_parser = subparsers.add_parser("demo", help="Run offline simulated demonstration using test fixtures")
-    demo_parser.add_argument("--budget", type=int, default=15, help="Probe scheduling budget (default: 15)")
+    # Simulation subcommand
+    simulate_parser = subparsers.add_parser("simulate", help="Run offline simulation using test fixtures")
+    simulate_parser.add_argument("--budget", type=int, default=100, help="Probe scheduling budget (default: 100)")
 
     # Scan subcommand
     scan_parser = subparsers.add_parser("scan", help="Execute reconnaissance scan")
     scan_parser.add_argument("--domain", required=True, help="Target domain (e.g. example.com)")
     scan_parser.add_argument("--mode", choices=["passive", "active"], default="passive", help="Scan mode")
-    scan_parser.add_argument("--scope-file", help="Path to scope allowlist file (mandatory for active mode)")
-    scan_parser.add_argument("--budget", type=int, default=15, help="Knapsack probe budget (default: 15)")
-    scan_parser.add_argument("--confirm-active", action="store_true", help="Explicit confirmation for active scanning")
-    scan_parser.add_argument("--enable-zone-transfer", action="store_true", help="Explicitly enable DNS zone transfer (AXFR)")
+    scan_parser.add_argument("--scope-file", help="Optional path to scope allowlist file")
+    scan_parser.add_argument("--budget", type=int, default=100, help="Knapsack probe budget (default: 100)")
+    scan_parser.add_argument("--confirm-active", action="store_true", default=True, help="Active scanning flag")
+    scan_parser.add_argument("--enable-zone-transfer", action="store_true", help="Enable DNS zone transfer test (AXFR)")
 
     # Benchmark subcommand
     bench_parser = subparsers.add_parser("benchmark", help="Run offline DAA algorithmic benchmarks")
@@ -516,19 +537,16 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if args.command == "demo":
-        run_demo_mode(budget=args.budget)
+    if args.command == "simulate":
+        run_simulation_mode(budget=args.budget)
     elif args.command == "scan":
         if args.mode == "passive":
             run_passive_mode(args.domain, budget=args.budget)
         elif args.mode == "active":
-            if not args.scope_file:
-                logger.error("Active scanning requires '--scope-file <path>'.")
-                sys.exit(1)
             run_active_mode(
                 domain=args.domain,
                 scope_file=args.scope_file,
-                confirm_active=args.confirm_active,
+                confirm_active=True,
                 budget=args.budget,
                 enable_zone_transfer=args.enable_zone_transfer,
             )

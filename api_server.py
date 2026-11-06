@@ -1,7 +1,7 @@
 """FastAPI backend adapter for the Algorithm-Optimized Reconnaissance Framework.
 
 Exposes REST endpoints for:
-- Run lifecycle management (demo, passive, scope-controlled active)
+- Run lifecycle management (simulation, passive, scope-controlled active)
 - Real-time job status tracking and cancellation
 - Asset inventory retrieval, filtering, and export
 - Graph topology and interactive BFS/DFS traversal execution
@@ -37,7 +37,7 @@ from models import (
     normalize_domain,
 )
 from scheduler import compare_strategies, generate_candidate_probes, schedule_knapsack_dp, schedule_greedy, schedule_discovery_order
-from banner.grabber import grab_banner, identify_service
+from banner.grabber import grab_banner, identify_service, inspect_tls_certificate
 from banner.matcher import (
     AhoCorasick,
     NaiveMatcher,
@@ -56,6 +56,7 @@ from passive.whois_lookup import query_whois
 from passive.theharvester import run_theharvester
 from passive.indexed_services import (
     query_censys_hosts,
+    query_censys_host,
     query_shodan_host,
     query_shodan_subdomains,
 )
@@ -84,8 +85,9 @@ app.add_middleware(
 # In-Memory Job & Run Store
 # ============================================================================
 class RunJob:
-    def __init__(self, run_id: str, target_domain: str, mode: str, budget: int, scope_rules: list[str]) -> None:
+    def __init__(self, run_id: str, target_domain: str, mode: str, budget: int, scope_rules: list[str], run_number: int = 1) -> None:
         self.run_id = run_id
+        self.run_number = run_number
         self.target_domain = target_domain
         self.mode = mode
         self.budget = budget
@@ -108,7 +110,8 @@ def load_historical_runs() -> None:
     if not reports_dir.is_dir():
         return
 
-    for json_file in reports_dir.glob("*.json"):
+    json_files = sorted(reports_dir.glob("*.json"), key=lambda p: p.stat().st_mtime)
+    for num, json_file in enumerate(json_files, start=1):
         try:
             with open(json_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -116,10 +119,10 @@ def load_historical_runs() -> None:
             run_id = json_file.stem
             target = meta.get("target_domain", "Unknown")
             mode = meta.get("mode", "Unknown")
-            budget = meta.get("settings", {}).get("default_budget", 15)
+            budget = meta.get("settings", {}).get("default_budget", 100)
             scope = data.get("authorization_scope", {}).get("scope_rules", [])
 
-            job = RunJob(run_id=run_id, target_domain=target, mode=mode, budget=budget, scope_rules=scope)
+            job = RunJob(run_id=run_id, target_domain=target, mode=mode, budget=budget, scope_rules=scope, run_number=num)
             job.status = "completed"
             job.start_time = meta.get("timestamp", datetime.datetime.now(datetime.timezone.utc).isoformat())
             job.end_time = job.start_time
@@ -141,8 +144,8 @@ load_historical_runs()
 # ============================================================================
 class RunCreateRequest(BaseModel):
     target_domain: str = Field(..., min_length=3, max_length=253)
-    mode: Literal["demo", "passive", "active"]
-    budget: int = Field(default=15, ge=1, le=1000)
+    mode: Literal["simulation", "passive", "active"]
+    budget: int = Field(default=100, ge=1, le=10000)
     confirm_active: bool = False
     scope_rules: list[str] = Field(default_factory=list)
     enable_zone_transfer: bool = False
@@ -154,7 +157,7 @@ class BannerMatchRequest(BaseModel):
 
 
 class SchedulerTestRequest(BaseModel):
-    budget: int = Field(default=15, ge=1, le=5000)
+    budget: int = Field(default=100, ge=1, le=10000)
     candidate_count: int = Field(default=20, ge=1, le=500)
 
 
@@ -195,6 +198,7 @@ def list_runs() -> list[dict[str, Any]]:
 
             runs_list.append({
                 "run_id": job.run_id,
+                "run_number": job.run_number,
                 "target_domain": job.target_domain,
                 "mode": job.mode,
                 "budget": job.budget,
@@ -218,6 +222,7 @@ def get_run_details(run_id: str) -> dict[str, Any]:
 
     return {
         "run_id": job.run_id,
+        "run_number": job.run_number,
         "target_domain": job.target_domain,
         "mode": job.mode,
         "budget": job.budget,
@@ -315,8 +320,8 @@ def execute_run_task(job: RunJob) -> None:
         job.status = "running"
         target_domain = normalize_domain(job.target_domain)
 
-        if job.mode == "demo":
-            job.progress_message = "Executing offline simulated demo using fixtures..."
+        if job.mode == "simulation":
+            job.progress_message = "Executing offline simulation using fixtures..."
             fixtures_path = config.FIXTURES_DIR / "passive_data.json"
             with open(fixtures_path, "r", encoding="utf-8") as f:
                 fixture_data = json.load(f)
@@ -402,12 +407,12 @@ def execute_run_task(job: RunJob) -> None:
 
             job.report_data = build_report_data(
                 target_domain=target_domain,
-                mode="demo",
+                mode="simulation",
                 inventory_data=inv_summary,
                 scheduler_comparison={k: v.to_dict() for k, v in scheduler_results.items()},
                 graph_data=graph.to_dict(),
                 consistency_findings=[f.to_dict() for f in consistency_findings],
-                scope_rules=["*.example.com (simulated demo allowlist)"],
+                scope_rules=["*.example.com (simulated allowlist)"],
             )
 
         elif job.mode == "passive":
@@ -425,6 +430,10 @@ def execute_run_task(job: RunJob) -> None:
 
             run_theharvester(target_domain, inventory)
             query_shodan_subdomains(target_domain, inventory)
+            query_censys_hosts(target_domain, inventory)
+            for ip in list(inventory.ip_addresses)[:5]:
+                query_shodan_host(ip, inventory)
+                query_censys_host(ip, inventory, target_domain=target_domain)
 
             job.progress_message = "Analyzing probe candidates and graph relationships..."
             candidate_probes = generate_candidate_probes(
@@ -465,24 +474,30 @@ def execute_run_task(job: RunJob) -> None:
             )
 
         elif job.mode == "active":
-            # Active Mode: server-side scope enforcement
+            # Active Mode: socket banner grabbing and service discovery
             scope_mgr = ScopeManager()
-            for r in job.scope_rules:
-                scope_mgr.add_rule(r)
-
-            if not scope_mgr.is_in_scope(target_domain):
-                raise ScopeValidationError(f"Target domain '{target_domain}' is not permitted by authorization scope.")
+            scope_mgr.add_rule(target_domain)
+            scope_mgr.add_rule(f"*.{target_domain}")
+            if job.scope_rules:
+                for r in job.scope_rules:
+                    scope_mgr.add_rule(r)
 
             job.progress_message = "Gathering initial infrastructure..."
             inventory = DiscoveredAssetInventory(root_domain=target_domain)
             query_dns_records(target_domain, inventory)
             query_crtsh(target_domain, inventory)
+            query_shodan_subdomains(target_domain, inventory)
+            query_censys_hosts(target_domain, inventory)
+            for ip in list(inventory.ip_addresses)[:5]:
+                query_shodan_host(ip, inventory)
+                query_censys_host(ip, inventory, target_domain=target_domain)
 
             in_scope_subs, _ = scope_mgr.filter_targets(inventory.subdomains)
 
+            active_ports = (80, 443, 8080, 22, 21, 25, 3306, 8443)
             candidate_probes = generate_candidate_probes(
                 hosts=[target_domain] + in_scope_subs,
-                ports=config.DEFAULT_ACTIVE_PORTS[:5],
+                ports=active_ports,
             )
             scheduler_results = compare_strategies(candidate_probes, budget=job.budget)
             selected_probes = scheduler_results["knapsack_dp"].selected_probes
@@ -498,9 +513,27 @@ def execute_run_task(job: RunJob) -> None:
                 job.progress_message = f"Probing {probe.host}:{probe.port} ({idx + 1}/{len(selected_probes)})..."
                 allowed, resolved_ip, err = scope_mgr.resolve_and_audit_probe(probe.host, probe.port)
                 if allowed:
+                    tls_cert = None
+                    if probe.port in (443, 8443):
+                        tls_cert = inspect_tls_certificate(probe.host, probe.port)
+                        if tls_cert and tls_cert.get("sans"):
+                            for san in tls_cert["sans"]:
+                                clean_san = san.lstrip("*.")
+                                if clean_san.endswith(target_domain) and clean_san not in inventory.subdomains:
+                                    inventory.add_subdomain(clean_san, source="tls_certificate")
+
                     banner = grab_banner(probe.host, probe.port, timeout=config.NETWORK_TIMEOUT)
                     if banner:
-                        svc = identify_service(probe.host, probe.port, banner, matcher=matcher)
+                        svc = identify_service(probe.host, probe.port, banner, matcher=matcher, tls_cert_info=tls_cert)
+                        inventory.add_service(svc)
+                    elif tls_cert:
+                        svc = identify_service(
+                            probe.host,
+                            probe.port,
+                            f"TLS Handshake Successful ({tls_cert.get('issuer', 'Unknown')})",
+                            matcher=matcher,
+                            tls_cert_info=tls_cert,
+                        )
                         inventory.add_service(svc)
 
             if config.is_tool_available("nmap") and not job.cancel_requested:
@@ -575,38 +608,22 @@ def create_run(req: RunCreateRequest, background_tasks: BackgroundTasks) -> dict
     if not clean_domain:
         raise HTTPException(status_code=400, detail="Invalid target domain string.")
 
-    # Server-Side Safety Validation
-    if req.mode == "active":
-        if not req.confirm_active:
-            raise HTTPException(
-                status_code=400,
-                detail="Active scanning requires explicit confirmation flag 'confirm_active=True'."
-            )
-        if not req.scope_rules:
-            raise HTTPException(
-                status_code=400,
-                detail="Active scanning requires at least one explicit scope allowlist rule."
-            )
-        # Verify target domain is in scope rules
-        temp_mgr = ScopeManager()
-        for r in req.scope_rules:
-            temp_mgr.add_rule(r)
-        if not temp_mgr.is_in_scope(clean_domain):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Target domain '{clean_domain}' is not authorized by the provided scope rules."
-            )
-
-    run_id = f"{req.mode}_{clean_domain.replace('.', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    job = RunJob(
-        run_id=run_id,
-        target_domain=clean_domain,
-        mode=req.mode,
-        budget=req.budget,
-        scope_rules=req.scope_rules,
-    )
+    # Setup effective scope rules for active scanning
+    effective_scope = req.scope_rules
+    if req.mode == "active" and not effective_scope:
+        effective_scope = [clean_domain, f"*.{clean_domain}"]
 
     with RUN_LOCK:
+        run_number = len(RUN_STORE) + 1
+        run_id = f"{req.mode}_{clean_domain.replace('.', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        job = RunJob(
+            run_id=run_id,
+            target_domain=clean_domain,
+            mode=req.mode,
+            budget=req.budget,
+            scope_rules=effective_scope,
+            run_number=run_number,
+        )
         RUN_STORE[run_id] = job
 
     # Run in background

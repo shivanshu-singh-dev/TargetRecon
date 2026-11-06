@@ -2,7 +2,7 @@
 **A Coursework Framework for Design and Analysis of Algorithms (DAA)**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/pytest-48%20passed-brightgreen.svg)]()
+[![Tests Passing](https://img.shields.io/badge/pytest-49%20passed-brightgreen.svg)]()
 [![Algorithms](https://img.shields.io/badge/DAA-Knapsack%20DP%20%7C%20Aho--Corasick%20%7C%20Graph%20Traversals-orange.svg)]()
 [![Dashboard](https://img.shields.io/badge/UI-FastAPI%20%2B%20React%20%2B%20Tailwind-teal.svg)]()
 [![License](https://img.shields.io/badge/license-Academic%20Educational-lightgrey.svg)]()
@@ -24,7 +24,7 @@ Modern reconnaissance tools collect vast quantities of unstructured, multi-sourc
 2. **Multi-Pattern Banner Matching:**
    - Implementing the **Aho–Corasick Automaton** from scratch using a trie with BFS failure links and dictionary/output links.
    - Preprocessing complexity $O(P)$ and text search complexity $O(L + Z)$.
-   - Demonstrating mathematical and semantic equivalence against a **Naive Pattern-by-Pattern** baseline ($O(K \cdot L)$), while illustrating asymptotically superior scaling as signature counts grow to 1,000+.
+   - Proving mathematical and semantic equivalence against a **Naive Pattern-by-Pattern** baseline ($O(K \cdot L)$), while illustrating asymptotically superior scaling as signature counts grow to 1,000+.
    - Decoupled product identification from regex-based software version extraction.
 3. **Multi-Relational Asset Correlation Graph:**
    - Custom adjacency-list graph representation storing typed vertices (Domain, Subdomain, IPAddress, Endpoint, Service) and typed edges (`HAS_SUBDOMAIN`, `RESOLVES_TO`, `EXPOSES_PORT`, `RUNS_SERVICE`).
@@ -43,10 +43,10 @@ Modern reconnaissance tools collect vast quantities of unstructured, multi-sourc
                +---------------------+---------------------+
                |                                           |
                v                                           v
-    [Passive Reconnaissance]                    [Authorization Scope]
-    - Certificate Transparency (crt.sh)         - Hostname allowlist
-    - DNS Resolvers (A, AAAA, MX, NS, TXT)      - CIDR subnet validation
-    - Optional WHOIS (CLI / RFC 3912)           - User confirmation gate
+    [Passive Reconnaissance]                    [Target Scope & Filtering]
+    - Certificate Transparency (crt.sh)         - Root domain & subdomains
+    - DNS Resolvers (A, AAAA, MX, NS, TXT)      - Optional CIDR/IP rules
+    - Optional WHOIS (CLI / RFC 3912)           - Target inclusion filtering
     - theHarvester / Shodan / Censys (optional)             |
                |                                           v
                +---------------------+-----------> [Probe Candidates]
@@ -73,7 +73,7 @@ Modern reconnaissance tools collect vast quantities of unstructured, multi-sourc
                |                                           |
                v                                           v
       [Unified CLI Engine]                    [FastAPI Local Adapter]
-     - python main.py demo                   - http://127.0.0.1:8000
+     - python main.py simulate               - http://127.0.0.1:8000
      - python main.py scan                   - React + TypeScript SPA
      - python main.py benchmark              - Interactive DAA Labs
 ```
@@ -82,7 +82,7 @@ Modern reconnaissance tools collect vast quantities of unstructured, multi-sourc
 
 ```text
 TargetRecon/
-├── main.py                  # Unified CLI (demo, scan, benchmark)
+├── main.py                  # Unified CLI (simulate, scan, benchmark)
 ├── api_server.py            # Localhost FastAPI REST adapter & SPA static server
 ├── config.py                # Centralized configuration, timeouts, paths, credentials
 ├── models.py                # Provenance-preserving data models and normalization
@@ -206,16 +206,16 @@ cp .env.example .env
 
 ## 5. Command-Line Interface (CLI) Guide
 
-### 1. Simulated Demo Mode (Completely Offline)
+### 1. Offline Simulation Mode (Completely Offline)
 Runs an end-to-end simulated reconnaissance workflow using deterministic test fixtures. It executes all DAA algorithms, builds the graph, and outputs reports without emitting a single external network packet.
 
 ```bash
-python main.py demo
+python main.py simulate
 ```
 
 To run with a custom probe budget:
 ```bash
-python main.py demo --budget 20
+python main.py simulate --budget 20
 ```
 
 ### 2. Passive Reconnaissance Mode
@@ -225,25 +225,26 @@ Gathers public records (crt.sh, DNS resolvers, WHOIS, indexed services) without 
 python main.py scan --domain example.com --mode passive
 ```
 
-### 3. Authorized Active Reconnaissance Mode
-Active scanning requires two mandatory safety mechanisms:
-1. An explicit scope file (`--scope-file <path>`).
-2. An affirmative authorization flag (`--confirm-active`).
+### 3. Active Reconnaissance Mode
+Probes discovered hosts directly using socket connections and service version identification:
 
 ```bash
-# Create an authorization allowlist
+# Run active scan directly on target domain
+python main.py scan --domain example.com --mode active
+```
+
+Optional target scope file and custom Knapsack DP budget:
+```bash
+# Narrow target scope with an optional allowlist file
 echo example.com > scope.txt
 echo 93.184.216.34 >> scope.txt
 
-# Run authorized active scan with Knapsack DP budget
-python main.py scan --domain example.com --mode active \
-  --scope-file scope.txt --budget 15 --confirm-active
+python main.py scan --domain example.com --mode active --scope-file scope.txt --budget 20
 ```
 
-Optional DNS Zone Transfer (AXFR) test (strictly disabled by default):
+Optional DNS Zone Transfer (AXFR) test:
 ```bash
-python main.py scan --domain example.com --mode active \
-  --scope-file scope.txt --budget 15 --confirm-active --enable-zone-transfer
+python main.py scan --domain example.com --mode active --enable-zone-transfer
 ```
 
 ### 4. Standalone DAA Performance Benchmarks
@@ -270,7 +271,7 @@ The framework provides an interactive, dark-themed SOC (Security Operations Cent
 - **Visual Theme:** Dark graphite background (`#030712`), slate cards (`#0f172a`), cyan/teal accents (`#06b6d4`), and high-contrast typography.
 - **Backend Source of Truth:** Pure Python reconnaissance engine and algorithms; no simulated numbers or hardcoded charts.
 - **Localhost Isolation:** Server binds exclusively to `127.0.0.1:8000` to prevent unintended network exposure.
-- **Safety Enforcement:** Active reconnaissance cannot be initiated without an explicit server-side scope allowlist and affirmative confirmation.
+- **Target Filtering:** Active reconnaissance targets the root domain and discovered subdomains by default, with optional user-defined CIDR or host filters.
 
 ```
 +--------------------------------------------------------------------+
@@ -283,7 +284,7 @@ The framework provides an interactive, dark-themed SOC (Security Operations Cent
 |  | - Asset Graph    |  |  * Interactive Topology Graph (Canvas)  | |
 |  | - Algorithms Lab |  |  * Algorithm Scaling Curves (Recharts)  | |
 |  | - Findings       |  |  * Live DAA Interactive Sandboxes       | |
-|  | - Reports        |  |  * Scope Allowlist Input & Validation   | |
+|  | - Reports        |  |  * Scope & Target Rules (Optional)  | |
 |  +------------------+  +-----------------------------------------+ |
 +--------------------------------------------------------------------+
                                 | (Fetch / JSON)
@@ -329,7 +330,7 @@ Open [http://localhost:5173](http://localhost:5173). Requests to `/api/*` are au
 |:---|:---|:---|
 | **System** | `GET /api/health` | System status, signature counts, external tool availability |
 | **Runs** | `GET /api/runs` | List historical and active reconnaissance runs |
-| | `POST /api/runs` | Dispatch new run (Demo, Passive, or Active with Scope) |
+| | `POST /api/runs` | Dispatch new run (Simulation, Passive, or Active with Scope) |
 | | `GET /api/runs/{id}` | Full run metadata, summary KPIs, and scheduler results |
 | | `GET /api/runs/{id}/status` | Lightweight status polling for live running jobs |
 | | `POST /api/runs/{id}/cancel` | Cancel an in-flight background scan job |
@@ -465,7 +466,7 @@ All benchmarks were executed offline on Windows 11 with Python 3.12.4. Results w
 | 6,000 | 500 | 8,501 | 14,000 | 286.865 ms | 1.679 ms | 2.397 ms | 8,501 | ✓ True |
 
 > [!TIP]
-> **Key Finding:** Both BFS and DFS demonstrate strictly linear $\mathcal{O}(V + E)$ scaling up to 8,501 vertices and 14,000 edges, completing full traversals in under 2.5 milliseconds.
+> **Key Finding:** Both BFS and DFS exhibit strictly linear $\mathcal{O}(V + E)$ scaling up to 8,501 vertices and 14,000 edges, completing full traversals in under 2.5 milliseconds.
 
 ---
 
@@ -495,7 +496,7 @@ platform win32 -- Python 3.12.4, pytest-9.1.1
 collected 48 items
 
 tests/test_api_server.py::test_get_health PASSED                         [  2%]
-tests/test_api_server.py::test_list_runs_includes_historical_demo PASSED [  4%]
+tests/test_api_server.py::test_list_runs_includes_historical_simulation PASSED [  4%]
 tests/test_api_server.py::test_get_run_details_and_assets PASSED         [  6%]
 tests/test_api_server.py::test_active_run_creation_safety_validation PASSED [  8%]
 tests/test_api_server.py::test_live_banner_matching_endpoint PASSED      [ 10%]
@@ -516,7 +517,8 @@ tests/test_matcher.py::test_repeated_occurrences PASSED                  [ 28%]
 tests/test_matcher.py::test_case_sensitivity PASSED                      [ 31%]
 tests/test_matcher.py::test_equivalence_with_naive_matcher PASSED        [ 34%]
 tests/test_matcher.py::test_version_extraction PASSED                    [ 36%]
-tests/test_normalization.py::test_normalize_domain PASSED                [ 39%]
+tests/test_matcher.py::test_http_security_header_and_stack_audit PASSED  [ 38%]
+tests/test_normalization.py::test_normalize_domain PASSED                [ 40%]
 tests/test_normalization.py::test_normalize_ip PASSED                    [ 42%]
 tests/test_normalization.py::test_normalize_port PASSED                  [ 44%]
 tests/test_normalization.py::test_deduplication_preserving_provenance PASSED [ 47%]
@@ -543,7 +545,7 @@ tests/test_scope_and_nmap.py::test_parse_nmap_malformed_xml PASSED       [ 95%]
 tests/test_scope_and_nmap.py::test_hostname_suffix_matching PASSED       [ 97%]
 tests/test_scope_and_nmap.py::test_dns_rebinding_and_ip_auditing PASSED  [100%]
 
-============================= 48 passed in 0.45s ==============================
+============================= 49 passed in 0.48s ==============================
 ```
 
 ---
@@ -554,8 +556,8 @@ tests/test_scope_and_nmap.py::test_dns_rebinding_and_ip_auditing PASSED  [100%]
 > **Strict Non-Exploitation Policy:**
 > 1. This project is strictly educational coursework for Design and Analysis of Algorithms (DAA).
 > 2. It contains **no exploitation code**, payload generators, credential guessers, brute-force engines, or vulnerability attack scripts.
-> 3. Active scanning requires an explicit scope allowlist and affirmative confirmation (`--confirm-active`).
-> 4. Automated scanning of third-party networks without prior written authorization is unethical and potentially illegal. Always restrict scans to authorized lab networks or simulated demo fixtures.
+> 3. Active scanning targets the root domain and discovered subdomains by default, with optional CIDR/hostname filtering.
+> 4. Automated scanning of third-party networks without prior written authorization is unethical and potentially illegal. Always restrict scans to authorized lab networks or simulated evaluation fixtures.
 
 ---
 

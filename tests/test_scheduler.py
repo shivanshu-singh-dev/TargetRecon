@@ -40,7 +40,7 @@ def test_knapsack_known_optimal():
 
 
 def test_greedy_is_suboptimal():
-    """Demonstrate a scenario where Greedy heuristic fails to reach the DP optimum."""
+    """Verify a scenario where Greedy heuristic fails to reach the DP optimum."""
     # Instance where Greedy takes highest ratio item and blocks better combination:
     # Item A: cost 6, value 7 (ratio = 7/6 = 1.1667)
     # Item B: cost 5, value 5 (ratio = 5/5 = 1.0)

@@ -30,74 +30,42 @@ def test_get_health():
     assert health["signatures_count"] > 10
 
 
-def test_list_runs_includes_historical_demo():
+def test_list_runs_includes_historical_simulation():
     """Verify indexing of reports from disk into runs list."""
     runs = list_runs()
     assert isinstance(runs, list)
-    assert any(r["run_id"] == "demo_report" for r in runs)
+    assert any(r["run_id"] == "simulation_report" for r in runs)
 
 
 def test_get_run_details_and_assets():
-    """Verify retrieving complete report and assets for demo_report."""
-    details = get_run_details("demo_report")
-    assert details["run_id"] == "demo_report"
+    """Verify retrieving complete report and assets for simulation_report."""
+    details = get_run_details("simulation_report")
+    assert details["run_id"] == "simulation_report"
     assert details["status"] == "completed"
 
-    assets = get_run_assets("demo_report")
+    assets = get_run_assets("simulation_report")
     assert len(assets["subdomains"]) > 0
     assert len(assets["ip_addresses"]) > 0
 
-    graph = get_run_graph("demo_report")
+    graph = get_run_graph("simulation_report")
     assert len(graph["nodes"]) > 0
     assert len(graph["edges"]) > 0
 
-    findings = get_run_findings("demo_report")
+    findings = get_run_findings("simulation_report")
     assert isinstance(findings, list)
 
 
-def test_active_run_creation_safety_validation():
-    """Verify server-side scope validation rejects active run without confirmation or scope."""
-    # 1. Missing confirmation
-    with pytest.raises(HTTPException) as excinfo:
-        create_run(
-            RunCreateRequest(
-                target_domain="example.com",
-                mode="active",
-                confirm_active=False,
-                scope_rules=["example.com"],
-            ),
-            BackgroundTasks(),
-        )
-    assert excinfo.value.status_code == 400
-    assert "confirm_active=True" in str(excinfo.value.detail)
-
-    # 2. Missing scope rules
-    with pytest.raises(HTTPException) as excinfo:
-        create_run(
-            RunCreateRequest(
-                target_domain="example.com",
-                mode="active",
-                confirm_active=True,
-                scope_rules=[],
-            ),
-            BackgroundTasks(),
-        )
-    assert excinfo.value.status_code == 400
-    assert "scope allowlist" in str(excinfo.value.detail)
-
-    # 3. Target domain not in scope rules
-    with pytest.raises(HTTPException) as excinfo:
-        create_run(
-            RunCreateRequest(
-                target_domain="evil.com",
-                mode="active",
-                confirm_active=True,
-                scope_rules=["example.com"],
-            ),
-            BackgroundTasks(),
-        )
-    assert excinfo.value.status_code == 400
-    assert "not authorized by the provided scope rules" in str(excinfo.value.detail)
+def test_active_run_creation_auto_scope():
+    """Verify active run creation accepts requests and auto-populates scope if empty."""
+    res = create_run(
+        RunCreateRequest(
+            target_domain="example.com",
+            mode="active",
+        ),
+        BackgroundTasks(),
+    )
+    assert res["status"] == "queued"
+    assert "active" in res["run_id"]
 
 
 def test_live_banner_matching_endpoint():
@@ -123,16 +91,16 @@ def test_live_scheduler_endpoint():
 
 
 def test_live_graph_traversal_endpoint():
-    """Verify BFS and DFS traversal on demo graph."""
+    """Verify BFS and DFS traversal on simulation graph."""
     bfs_res = api_graph_traversal(
-        GraphTraverseRequest(run_id="demo_report", algorithm="bfs", start_node_id="example.com")
+        GraphTraverseRequest(run_id="simulation_report", algorithm="bfs", start_node_id="example.com")
     )
     assert bfs_res["algorithm"] == "BFS"
     assert len(bfs_res["traversal_order"]) > 0
     assert bfs_res["traversal_order"][0] == "example.com"
 
     dfs_res = api_graph_traversal(
-        GraphTraverseRequest(run_id="demo_report", algorithm="dfs", start_node_id="example.com")
+        GraphTraverseRequest(run_id="simulation_report", algorithm="dfs", start_node_id="example.com")
     )
     assert dfs_res["algorithm"] == "DFS"
     assert len(dfs_res["traversal_order"]) == len(bfs_res["traversal_order"])

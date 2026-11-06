@@ -92,8 +92,12 @@ def test_missing_theharvester():
         assert any("theHarvester is not installed" in err["message"] for err in inv.errors)
 
 
-def test_missing_api_keys_shodan_and_censys():
+def test_missing_api_keys_shodan_and_censys(monkeypatch):
     """Verify that missing API credentials do not fail the pipeline and record informative status."""
+    from config import AppConfig
+    dummy_cfg = AppConfig(SHODAN_API_KEY=None, CENSYS_API_ID=None, CENSYS_API_SECRET=None, CENSYS_API_KEY=None)
+    monkeypatch.setattr("passive.indexed_services.config", dummy_cfg)
+
     inv = DiscoveredAssetInventory(root_domain="example.com")
 
     # Shodan without key
@@ -102,7 +106,7 @@ def test_missing_api_keys_shodan_and_censys():
     assert any("Shodan API key not configured" in err["message"] for err in inv.errors)
 
     # Censys without keys
-    ips = query_censys_hosts("example.com", inv, api_id=None, api_secret=None)
+    ips = query_censys_hosts("example.com", inv, api_id=None, api_secret=None, api_key=None)
     assert len(ips) == 0
     assert any("Censys API credentials not configured" in err["message"] for err in inv.errors)
 

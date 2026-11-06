@@ -146,16 +146,38 @@ def generate_markdown_report(report_data: dict[str, Any]) -> str:
     ])
 
     if services:
-        lines.append("| Endpoint | Service Name | Identified Product | Version | Source | Confidence |")
-        lines.append("|:---|:---|:---|:---|:---|:---|")
+        lines.append("| Endpoint | Service Name | Identified Product | Version | Tech Stack | Security Grade | Confidence |")
+        lines.append("|:---|:---|:---|:---|:---|:---:|:---:|")
         for s in services:
             ep = s.get("endpoint_id", f"{s.get('host')}:{s.get('port')}")
             s_name = s.get("service_name") or "unknown"
             prod = s.get("product") or "Unidentified"
             ver = s.get("version") or "N/A"
-            src = s.get("source", "active")
+            frameworks = ", ".join(s.get("detected_frameworks", [])) or "—"
+            sec_score = s.get("security_score") or "—"
             conf = f"{s.get('confidence', 0.8) * 100:.0f}%"
-            lines.append(f"| `{ep}` | {s_name} | {prod} | {ver} | {src} | {conf} |")
+            lines.append(f"| `{ep}` | {s_name} | {prod} | {ver} | {frameworks} | {sec_score} | {conf} |")
+
+        # Include Deep TLS Certificate telemetry if present
+        tls_services = [s for s in services if s.get("tls_cert_info")]
+        if tls_services:
+            lines.extend([
+                f"",
+                f"### 2.4 Deep TLS / SSL Certificate Telemetry",
+                f"",
+                f"| Host:Port | Issuer | Subject CN | Days Remaining | Expired? | Subject Alternative Names (SANs) |",
+                f"|:---|:---|:---|:---:|:---:|:---|",
+            ])
+            for s in tls_services:
+                cert = s.get("tls_cert_info", {})
+                sans_list = cert.get("sans", [])
+                sans_preview = ", ".join(sans_list[:5])
+                if len(sans_list) > 5:
+                    sans_preview += f" (+{len(sans_list) - 5} more)"
+                lines.append(
+                    f"| `{s.get('endpoint_id')}` | {cert.get('issuer', 'N/A')} | `{cert.get('subject', 'N/A')}` | "
+                    f"{cert.get('days_remaining', 'N/A')} | {'YES' if cert.get('is_expired') else 'NO'} | {sans_preview or 'None'} |"
+                )
     else:
         lines.append("*No network services detected or active scanning was disabled.*")
 
