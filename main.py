@@ -1,10 +1,10 @@
-"""Command-Line Interface for Algorithm-Optimized Reconnaissance Framework.
+"""Command-Line Interface for TargetRecon — Advanced Cyber Reconnaissance & OSINT Platform.
 
 Supports four safe execution workflows:
 1. simulate: Fully offline, fixture-driven simulation; zero external network packets.
 2. scan --mode passive: Collects publicly available OSINT data without probing services.
 3. scan --mode active: Controlled active scanning strictly gated by allowlist and confirmation.
-4. benchmark: Rigorous offline DAA performance experiments (Scheduler, Matcher, Graph).
+4. benchmark: Rigorous offline scanning engine performance benchmarks (Scheduler, Matcher, Graph).
 """
 
 from __future__ import annotations
@@ -120,8 +120,8 @@ def run_simulation_mode(budget: int = 100) -> tuple[Path, Path]:
             svc = identify_service(b["host"], b["port"], b["banner"], matcher=matcher)
             inventory.add_service(svc)
 
-    # 5. DAA Probe Scheduling Comparison
-    logger.info("Evaluating Probe Schedulers (Discovery vs Greedy vs 0/1 Knapsack DP)...")
+    # 5. Intelligent Probe Scheduling Optimization
+    logger.info("Evaluating Probe Schedulers (Discovery vs Greedy vs Dynamic Programming)...")
     source_counts = {sub: len([o for o in inventory.observations if o.asset_id == sub]) for sub in inventory.subdomains}
     resolves_map = {sub: True for sub in inventory.subdomains if sub != "unresolved-legacy.example.com"}
     resolves_map["unresolved-legacy.example.com"] = False
@@ -263,7 +263,7 @@ def run_passive_mode(domain: str, budget: int = 100) -> tuple[Path, Path]:
         query_shodan_host(ip, inventory)
         query_censys_host(ip, inventory, target_domain=clean_domain)
 
-    # DAA Scheduler Comparison
+    # Intelligent Scheduler Optimization
     candidate_probes = generate_candidate_probes(
         hosts=list(inventory.subdomains) + [clean_domain],
         ports=(22, 80, 443, 8080),
@@ -361,7 +361,7 @@ def run_active_mode(
         len(out_of_scope_subdomains),
     )
 
-    # 4. Generate Candidate Probes & Schedule with 0/1 Knapsack DP
+    # 4. Generate Candidate Probes & Schedule with Optimization Engine
     active_ports = (80, 443, 8080, 22, 21, 25, 3306, 8443)
     candidate_probes = generate_candidate_probes(
         hosts=[clean_domain] + in_scope_subdomains,
@@ -371,7 +371,7 @@ def run_active_mode(
     selected_probes = scheduler_results["knapsack_dp"].selected_probes
 
     logger.info(
-        "0/1 Knapsack DP selected %d active probes out of %d candidates (Budget=%d, Cost=%d, Value=%d)",
+        "Intelligent Scheduler selected %d active probes out of %d candidates (Budget=%d, Cost=%d, Value=%d)",
         len(selected_probes),
         len(candidate_probes),
         budget,
@@ -609,8 +609,8 @@ def run_active_mode(
 # Benchmark Mode
 # ============================================================================
 def run_benchmarks(target: str = "all") -> None:
-    """Execute standalone DAA benchmark experiments."""
-    logger.info("=== Running Standalone DAA Coursework Benchmarks ===")
+    """Execute standalone engine benchmark experiments."""
+    logger.info("=== Running Standalone Recon Engine Benchmarks ===")
 
     if target in ("all", "scheduler"):
         logger.info("\n[1/3] Benchmarking Probe Scheduler Algorithms...")
@@ -635,7 +635,7 @@ def run_benchmarks(target: str = "all") -> None:
 # ============================================================================
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Algorithm-Optimized Reconnaissance Framework (DAA Coursework)",
+        description="TargetRecon — Cyber Reconnaissance & Attack Surface OSINT Platform",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", help="Execution mode")
@@ -649,12 +649,12 @@ def main() -> None:
     scan_parser.add_argument("--domain", required=True, help="Target domain (e.g. example.com)")
     scan_parser.add_argument("--mode", choices=["passive", "active"], default="passive", help="Scan mode")
     scan_parser.add_argument("--scope-file", help="Optional path to scope allowlist file")
-    scan_parser.add_argument("--budget", type=int, default=100, help="Knapsack probe budget (default: 100)")
+    scan_parser.add_argument("--budget", type=int, default=100, help="Maximum active probe allowance (default: 100)")
     scan_parser.add_argument("--confirm-active", action="store_true", default=True, help="Active scanning flag")
     scan_parser.add_argument("--enable-zone-transfer", action="store_true", help="Enable DNS zone transfer test (AXFR)")
 
     # Benchmark subcommand
-    bench_parser = subparsers.add_parser("benchmark", help="Run offline DAA algorithmic benchmarks")
+    bench_parser = subparsers.add_parser("benchmark", help="Run offline scanning engine performance benchmarks")
     bench_parser.add_argument("--all", action="store_true", help="Run all benchmarks (scheduler, matcher, graph)")
     bench_parser.add_argument("--target", choices=["scheduler", "matcher", "graph", "all"], default="all", help="Target benchmark")
 

@@ -95,10 +95,10 @@ export const AlgorithmsPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Cpu className="w-6 h-6 text-cyan-600 dark:text-cyan-400" />
-            Algorithm Performance & Optimization
+            Engine Performance & Recon Optimization
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Empirical benchmark metrics showing how Knapsack DP, Aho-Corasick, and Graph Traversals accelerate OSINT reconnaissance.
+            Performance benchmarks demonstrating how intelligent probe scheduling, signature matching, and graph correlation accelerate OSINT operations.
           </p>
         </div>
 
@@ -112,7 +112,7 @@ export const AlgorithmsPage: React.FC = () => {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            1. 0/1 Knapsack Scheduler
+            1. Intelligent Probe Scheduler
           </button>
           <button
             onClick={() => setActiveTab('matcher')}
@@ -122,7 +122,7 @@ export const AlgorithmsPage: React.FC = () => {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            2. Aho–Corasick Matcher
+            2. Signature Matcher
           </button>
           <button
             onClick={() => setActiveTab('graph')}
@@ -132,7 +132,7 @@ export const AlgorithmsPage: React.FC = () => {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            3. Asset Graph Traversals
+            3. Asset Graph Engine
           </button>
         </div>
       </div>

@@ -172,7 +172,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                   <strong>Graph Nodes:</strong> {currentRun.report_data.graph?.metrics?.total_nodes || 0} (Edges: {currentRun.report_data.graph?.metrics?.total_edges || 0})
                 </div>
                 <div>
-                  <strong>0/1 Knapsack Optimal Value:</strong> {currentRun.report_data.scheduler?.knapsack_dp?.total_value || 0} (Cost: {currentRun.report_data.scheduler?.knapsack_dp?.total_cost || 0})
+                  <strong>Optimized Probe Yield:</strong> {currentRun.report_data.scheduler?.knapsack_dp?.total_value || 0} (Cost: {currentRun.report_data.scheduler?.knapsack_dp?.total_cost || 0})
                 </div>
                 <div className="text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-800/80">
                   Use the download buttons above to retrieve the complete comprehensive markdown file formatted with full asset tables and mermaid graph topology.

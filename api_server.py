@@ -1,11 +1,11 @@
-"""FastAPI backend adapter for the Algorithm-Optimized Reconnaissance Framework.
+"""FastAPI backend adapter for TargetRecon — Cyber Reconnaissance & OSINT Platform.
 
 Exposes REST endpoints for:
 - Run lifecycle management (simulation, passive, scope-controlled active)
 - Real-time job status tracking and cancellation
 - Asset inventory retrieval, filtering, and export
 - Graph topology and interactive BFS/DFS traversal execution
-- Live DAA algorithm test benches (Knapsack DP scheduler, Aho-Corasick matching)
+- Live reconnaissance optimization test benches (Dynamic Programming scheduler, Aho-Corasick matching)
 - Benchmark result aggregation and on-demand benchmark execution
 - Report downloads (JSON and Markdown)
 """
@@ -70,9 +70,9 @@ from benchmarks.benchmark_graph import run_graph_benchmarks
 logger = logging.getLogger("recon_api")
 
 app = FastAPI(
-    title="Algorithm-Optimized Reconnaissance Framework API",
-    version="1.0.0",
-    description="REST API adapter exposing DAA reconnaissance engine, algorithms, and reporting.",
+    title="TargetRecon — Cyber Reconnaissance & OSINT Platform API",
+    version="2.0.0",
+    description="REST API adapter exposing OSINT aggregation engine, attack surface correlation, and reporting.",
 )
 
 # CORS configuration for local development
@@ -362,7 +362,7 @@ def execute_run_task(job: RunJob) -> None:
                     svc = identify_service(b["host"], b["port"], b["banner"], matcher=matcher)
                     inventory.add_service(svc)
 
-            job.progress_message = "Scheduling probes with 0/1 Knapsack DP..."
+            job.progress_message = "Scheduling probes with optimization engine..."
             candidate_probes = generate_candidate_probes(
                 hosts=list(inventory.subdomains) + [target_domain],
                 ports=(22, 80, 443, 8080),
@@ -765,7 +765,7 @@ def create_run(req: RunCreateRequest, background_tasks: BackgroundTasks) -> dict
 
 
 # ============================================================================
-# Live DAA Algorithm Endpoints
+# Live Optimization & Engine Analytics Endpoints
 # ============================================================================
 @app.post("/api/algorithms/match-banner")
 def api_banner_match(req: BannerMatchRequest) -> dict[str, Any]:
@@ -803,7 +803,7 @@ def api_banner_match(req: BannerMatchRequest) -> dict[str, Any]:
 
 @app.post("/api/algorithms/schedule")
 def api_scheduler(req: SchedulerTestRequest) -> dict[str, Any]:
-    """Run DAA probe scheduling comparison across a synthetic candidate set."""
+    """Run probe scheduling optimization comparison across a synthetic candidate set."""
     from benchmarks.benchmark_scheduler import generate_synthetic_probes
     candidates = generate_synthetic_probes(req.candidate_count, seed=42)
 

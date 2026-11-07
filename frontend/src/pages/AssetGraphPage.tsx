@@ -390,7 +390,7 @@ export const AssetGraphPage: React.FC<AssetGraphPageProps> = ({ currentRun }) =>
         {/* Traversal Dispatcher */}
         <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-lg">
           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-mono">
-            DAA Traversal:
+            Graph Traversal:
           </span>
           <select
             value={traversalAlgo}

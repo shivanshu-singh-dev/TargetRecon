@@ -335,7 +335,7 @@ export const ReconRunPage: React.FC<ReconRunPageProps> = ({ onRunCreated }) => {
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-              Knapsack Probe Budget (Cost Units)
+              Active Probe Allowance (Cost Units)
             </label>
             <span className="text-xs text-slate-500 dark:text-slate-400">
               Default: 100 units
@@ -381,7 +381,7 @@ export const ReconRunPage: React.FC<ReconRunPageProps> = ({ onRunCreated }) => {
           </div>
 
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-            Enter any custom probe budget ceiling (default: 100). The 0/1 Knapsack DP algorithm will mathematically maximize the security intelligence extracted within this exact allowance.
+            Controls maximum probe volume and network overhead (default: 100). The scheduler selects the highest-priority attack surfaces to maximize intelligence extraction while preventing WAF bans.
           </p>
         </div>
 

@@ -82,7 +82,7 @@ def test_report_json_and_markdown_generation():
 
     # 2. Verify Markdown formatting contains essential sections
     md_str = generate_markdown_report(report_dict)
-    assert "# Algorithm-Optimized Reconnaissance Framework" in md_str
+    assert "TargetRecon" in md_str
     assert "## 1. Executive Summary" in md_str
     assert "## 2. Discovered Assets Inventory" in md_str
     assert "0/1 Knapsack Dynamic Programming" in md_str

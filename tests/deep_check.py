@@ -157,7 +157,7 @@ def main():
     md_req = urllib.request.Request(f"{BASE_URL}/api/runs/{act_id}/reports/markdown")
     with urllib.request.urlopen(md_req) as resp:
         md_text = resp.read().decode("utf-8")
-        assert "# Algorithm-Optimized Reconnaissance Framework" in md_text
+        assert "TargetRecon" in md_text
         print(f"    Markdown Report downloaded successfully ({len(md_text)} chars).")
 
     print("\n" + "=" * 70)

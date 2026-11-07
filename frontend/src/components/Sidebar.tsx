@@ -50,7 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const analysisItems = [
-    { id: 'algorithms', label: 'Algorithm Performance', icon: Cpu },
+    { id: 'algorithms', label: 'Engine Performance', icon: Cpu },
     { id: 'reports', label: 'Reports', icon: FileText },
   ];
 

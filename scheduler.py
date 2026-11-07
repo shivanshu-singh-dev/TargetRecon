@@ -63,7 +63,7 @@ def generate_candidate_probes(
 ) -> list[ProbeCandidate]:
     """Derive prioritized candidate probes for discovered hosts.
 
-    Cost model (illustrative for DAA lab coursework evaluation):
+    Cost model (optimized for stealth and rate limit conservation):
     - Standard Web ports (80, 443): Cost 2 (fast HTTP probes)
     - Interactive/Stateful ports (22, 21, 25): Cost 3 (socket handshake & banner)
     - Database/Secondary ports (3306, 8080): Cost 4 (slower response/negotiation)

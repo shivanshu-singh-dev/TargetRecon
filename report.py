@@ -49,8 +49,8 @@ def build_report_data(
             "target_domain": target_domain,
             "mode": mode,
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "framework": "Algorithm-Optimized Reconnaissance Framework",
-            "version": "1.0.0 (DAA Coursework)",
+            "framework": "TargetRecon — Cyber Reconnaissance & OSINT Platform",
+            "version": "2.0.0 (Cybersecurity & OSINT Platform)",
             "settings": settings,
             "external_tools_status": config.get_tool_status(),
         },
@@ -94,7 +94,7 @@ def generate_markdown_report(report_data: dict[str, Any]) -> str:
     errors = inv.get("errors", [])
 
     lines = [
-        f"# Algorithm-Optimized Reconnaissance Framework — Audit Report",
+        f"# TargetRecon — Cyber Reconnaissance & OSINT Audit Report",
         f"",
         f"**Target Domain:** `{target}`  ",
         f"**Execution Mode:** `{mode}`  ",
@@ -216,14 +216,14 @@ def generate_markdown_report(report_data: dict[str, Any]) -> str:
 
     lines.extend([
         f"",
-        f"## 3. Data Structures & Algorithms (DAA) Analysis",
+        f"## 3. Intelligent Scan Optimization & Engine Analytics",
         f"",
-        f"### 3.1 Probe Scheduler Evaluation",
+        f"### 3.1 Adaptive Probe Scheduling Evaluation",
         f"",
-        f"Under a bounded probe budget, the scheduler evaluates three strategies to select candidate active probes:",
+        f"To prevent rate-limiting, WAF IP drops, and unnecessary network noise, the engine schedules candidate probes under a bounded allowance:",
         f"- **Discovery-Order:** Sequential first-fit baseline in order of arrival (O(n)).",
-        f"- **Greedy Heuristic:** Sorts descending by efficiency ratio (`value / cost`) (O(n log n)).",
-        f"- **0/1 Knapsack Dynamic Programming:** Exact optimal subset selection using 2D DP recurrence (O(nB)).",
+        f"- **Greedy Ratio Heuristic:** Fast prioritization ranking candidates by value-to-cost ratio (O(n log n)).",
+        f"- **Optimal DP Scheduler (0/1 Knapsack Dynamic Programming):** Exact intelligence-maximizing subset selection avoiding suboptimal budget traps (O(nB)).",
         f"",
     ])
 
